@@ -51,7 +51,7 @@ final class World {
             EV_COOL = 6, EV_OPEN = 7, EV_WIN = 8, EV_DROWN = 9, EV_BURN = 10, EV_SINK = 11, EV_TURN = 12,
             EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16, EV_TREMOR = 17, EV_SHIFT = 18,
             EV_RISEN = 19, EV_FUNNEL = 20, EV_ECHO = 21, EV_BEATEN = 22, EV_RIVAL_READY = 23,
-            EV_BOSS_LAND = 24, EV_STRIKE = 25, EV_RUPTURE = 26, EV_CRUSHED = 27, EV_STOMP = 28;
+            EV_BOSS_LAND = 24, EV_STRIKE = 25, EV_RUPTURE = 26, EV_CRUSHED = 27, EV_STOMP = 28, EV_SAVED = 29;
     /** A shard humming: EV_HUM + rank * 16 + loudness, 1 to 15. */
     static final int EV_HUM = 1000;
     /** A rival landing near the drop: EV_RIVAL + loudness, 1 to 15. */
@@ -136,6 +136,13 @@ final class World {
     final Rival[] rivals;
     /** In a rival's own copy of the level: the rival, asked at every landing what to do. */
     Rival brain;
+    /**
+     * Easy: the game helps the finger. A hop ordered into the liquid, onto a mirage, onto a hot
+     * plate with no bead or over one, is turned aside: a leap into a hop, a slant into a straight
+     * hop, and if that is no better, a bounce on the spot; a spring that would throw it into the
+     * liquid only bounces it.
+     */
+    boolean easy;
     /** The watcher plays against the black drop, choosing at each landing. */
     private boolean watchBoss;
     /** The black drop of the hundredth level, or null. */
@@ -770,6 +777,7 @@ final class World {
         }
         if (pilot != null) order(t);
         plan(move);
+        if (easy && pilot == null) guard();
         // a spring's throw leaves the order standing for the landing after it
         if (t != Level.SPRING) {
             queued = 0;
@@ -953,6 +961,43 @@ final class World {
             queued = 1;
             slant = bestSide;
         }
+    }
+
+    /** Easy: turns a planned hop that would end in harm into the nearest one that would not. */
+    private void guard() {
+        if (!harmful(move)) return;
+        if (move[2] == LEAP) {
+            move[0] /= 2;
+            move[1] /= 2;
+            move[2] = HOP;
+            if (!harmful(move)) {
+                emit(EV_SAVED);
+                return;
+            }
+        }
+        if (move[2] == HOP && Math.abs(move[0]) + Math.abs(move[1]) == 2) {
+            move[0] = DX[facing];
+            move[1] = DZ[facing];
+            if (!harmful(move)) {
+                emit(EV_SAVED);
+                return;
+            }
+        }
+        move[0] = 0;
+        move[1] = 0;
+        move[2] = STILL;
+        emit(EV_SAVED);
+    }
+
+    /** Whether this hop would drown or burn the drop. One that strikes a floor overhead only comes back. */
+    private boolean harmful(int[] m) {
+        if (m[2] == STILL) return false;
+        int tx = cellX + m[0], tz = cellZ + m[1];
+        if (blocked(m[2], tx, tz)) return false;
+        int f = landing(tx, tz, m[2] == THROW ? cellF + 1 : cellF);
+        if (f < 0) return true;
+        if (typeAt(tx, tz, f) == Level.HOT && beads == 0) return true;
+        return m[2] == LEAP && heatBelow(cellX + m[0] / 2, cellZ + m[1] / 2);
     }
 
     /** True if a floor overhead stops this kind of hop: a leap or a throw needs open air above. */

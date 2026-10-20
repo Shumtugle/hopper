@@ -114,6 +114,18 @@ and the levels go on; from then on a little hopscotch stands between the map
 and the eye. Tapped, it opens the open mode: every level, and behind the strip
 the world as it stood at each number. Tapped again, it closes.
 
+## Settings
+
+Along the bottom of the hopscotch, three chalk buttons; a tap turns one over.
+
+- **Sound** or **no sound**.
+- **Watcher to 20** or **watcher to 100**: the levels the eye comes to, the black
+  drop's included in the second.
+- **Hard** or **easy**. Easy helps the finger: a hop ordered into the liquid,
+  onto a mirage or a hot plate, or over one, is turned aside with a short
+  warning tap: a leap becomes a hop, a slant a straight hop, or the drop bounces
+  where it is; a spring that would throw it into the liquid only bounces it.
+
 ## The developer's mode
 
 A long press on the hopscotch turns it on, with a run of bells upwards; another

@@ -1,5 +1,13 @@
 # Changes
 
+## 1.7
+
+- Settings, three chalk buttons along the bottom of the hopscotch: sound or no
+  sound; the watcher up to the twentieth level or up to the hundredth; hard or
+  easy. Easy helps the finger: a hop ordered into harm is turned aside with a
+  warning tap, and a spring that would throw the drop into the liquid only
+  bounces it.
+
 ## 1.6.4
 
 - The watcher no longer gives up the fight with the black drop at its first

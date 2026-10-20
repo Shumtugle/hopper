@@ -42,6 +42,8 @@ final class Hud {
     boolean markShown;
     /** The open mode is on: the mark burns gold. */
     boolean open;
+    /** The first level the watcher no longer comes to. */
+    int watcherTo = 100;
     static final float MARK_R = 0.05f;
 
     /** The centre and size of the watcher's eye, in screen widths: the top right corner, level with the map. */
@@ -139,6 +141,8 @@ final class Hud {
         eyeShown = false;
         if (w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
         boolean playing = w.pilot != null;
+        // past the level set on the hopscotch, the watcher does not come
+        if (!playing && w.index >= watcherTo) return;
         float fade = playing || thinking ? 1f
                 : (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
         if (fade <= 0.01f) return;
@@ -210,7 +214,9 @@ final class Hud {
                 float x = Chalk.cellX(row, k);
                 // squares far up the strip fade into the black
                 float far = 1f - World.smooth(hh - 0.25f, hh + 0.05f, y);
-                float a = in * far;
+                // and those low down give way to the settings along the bottom
+                float low = World.smooth(-hh + 0.16f, -hh + 0.3f, y);
+                float a = in * far * low;
                 if (a <= 0.01f) continue;
                 if (index > ch.reached) {
                     // locked: a faint outline, fainter the further it lies

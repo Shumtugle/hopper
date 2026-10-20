@@ -58,6 +58,13 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
      */
     private boolean dev;
     private static final int DEV_AHEAD = 1000;
+    // the three settings, chosen on the hopscotch
+    private boolean soundOn, easy;
+    private int watcherTo;
+    private int settingsTex;
+    /** Where the settings stand on the hopscotch: their middle and half height, in clip space. */
+    private static final float SET_Y = -0.9f, SET_W = 0.94f;
+    private static final int SET_TW = 1024, SET_TH = 112;
     /** The black drop has been beaten; the dark just after that is the end, with the world turning gold. */
     private boolean crowned, ending;
     /** How far everything lit is turned to gold this frame. */
@@ -134,6 +141,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         this.marks = marks;
         dev = act.dev();
         crowned = act.crowned();
+        soundOn = act.soundOn();
+        watcherTo = act.watcherTo();
+        easy = act.easy();
         Rival.threads = true;
         setEGLContextClientVersion(3);
         setEGLConfigChooser(8, 8, 8, 8, 24, 0);
@@ -254,12 +264,14 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         preview = null;
         upload2(triBuf, new float[] {-1, -1, 3, -1, -1, 3});
         upload2(quadBuf, new float[] {-1, -1, 1, -1, -1, 1, 1, 1});
-        int[] tex = new int[3];
-        GLES30.glGenTextures(3, tex, 0);
+        int[] tex = new int[4];
+        GLES30.glGenTextures(4, tex, 0);
         fieldTex = tex[0];
         titleTex = tex[1];
         digitTex = tex[2];
+        settingsTex = tex[3];
         makeDigits();
+        makeSettings();
         levelReady = false;
         lastNanos = 0;
     }
@@ -307,6 +319,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         linear();
         makeTitle(w);
         prepareCity(w);
+        w.easy = easy;
         levelReady = true;
     }
 
@@ -524,6 +537,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         hudShapes.crowned = crowned;
         hudShapes.chalkVeil = dev ? 0.35f : 0.9f;
         hudShapes.open = dev;
+        hudShapes.watcherTo = watcherTo;
         Mat.lookAt(view, eye[0], eye[1], eye[2], look[0], look[1], look[2]);
         Mat.mul(mvp, proj, view);
         if (w.cut && Float.isNaN(w.cutScreen)) w.cutScreen = screenAngle(w);
@@ -708,6 +722,24 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     /** A tap on the hopscotch: a square starts its level in the dark; anywhere else goes back. */
     private void pick(float x, float y) {
+        // the settings along the bottom: a tap on one turns it over
+        float ny = y / (aspect * 0.5f), hh = SET_W * SET_TH / (float) SET_TW / aspect;
+        if (Math.abs(ny - SET_Y) < hh * 1.6f) {
+            int k = x < -1f / 6f ? 0 : x < 1f / 6f ? 1 : 2;
+            if (k == 0) {
+                soundOn = !soundOn;
+                act.setSoundOn(soundOn);
+            } else if (k == 1) {
+                watcherTo = watcherTo > 20 ? 20 : 100;
+                act.setWatcherTo(watcherTo);
+            } else {
+                easy = !easy;
+                act.setEasy(easy);
+                world.easy = easy;
+            }
+            makeSettings();
+            return;
+        }
         int index = chalk.hit(x, y);
         if (index == -1) return;
         chalk.close();
@@ -724,7 +756,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     /** Asks the watcher to play this level: it works out the way on a thread of its own. */
     private void summon() {
-        if (thinking || world.pilot != null) return;
+        if (thinking || world.pilot != null || level >= watcherTo) return;
         thinking = true;
         act.onSummon();
         final int target = level;
@@ -817,6 +849,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
             }
         }
+        // the settings along the bottom
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, settingsTex);
+        GLES30.glUniform1f(loc(text, "uAlpha"), 0.85f * World.smooth(0f, 0.35f, chalk.age));
+        GLES30.glUniform2f(loc(text, "uSpan"), 0f, 1f);
+        GLES30.glUniform4f(loc(text, "uRect"), 0f, SET_Y, SET_W, SET_W * SET_TH / (float) SET_TW / aspect);
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
         GLES30.glDisable(GLES30.GL_BLEND);
     }
 
@@ -892,6 +930,34 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             c.drawText(hint, TITLE_W / 2f, 300f, p);
         }
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, titleTex);
+        linear();
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, b, 0);
+        b.recycle();
+    }
+
+    /** The three settings as chalk labels in a row, for the bottom of the hopscotch. */
+    private void makeSettings() {
+        Bitmap b = Bitmap.createBitmap(SET_TW, SET_TH, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFFFFFFFF);
+        p.setTextAlign(Paint.Align.CENTER);
+        p.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));
+        p.setTextSize(40f);
+        p.setLetterSpacing(0.05f);
+        Paint frame = new Paint(Paint.ANTI_ALIAS_FLAG);
+        frame.setColor(0x99FFFFFF);
+        frame.setStyle(Paint.Style.STROKE);
+        frame.setStrokeWidth(3f);
+        String[] label = {soundOn ? "sound" : "no sound", watcherTo > 20 ? "watcher to 100" : "watcher to 20", easy ? "easy" : "hard"};
+        float third = SET_TW / 3f;
+        Paint.FontMetrics m = p.getFontMetrics();
+        for (int k = 0; k < 3; k++) {
+            float cx = third * (k + 0.5f);
+            c.drawRoundRect(cx - third * 0.44f, 14f, cx + third * 0.44f, SET_TH - 14f, 40f, 40f, frame);
+            c.drawText(label[k], cx, SET_TH / 2f - (m.ascent + m.descent) / 2f, p);
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, settingsTex);
         linear();
         GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, b, 0);
         b.recycle();

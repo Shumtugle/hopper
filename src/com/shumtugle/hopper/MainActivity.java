@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
                     startGame();
                     stage.resumeClock();
                     stage.onResume();
-                    sound.start();
+                    if (soundOn()) sound.start();
                     hideBars();
                 }
             });
@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
         hideBars();
         stage.resumeClock();
         stage.onResume();
-        sound.start();
+        if (soundOn()) sound.start();
     }
 
     @Override
@@ -108,6 +108,40 @@ public final class MainActivity extends Activity {
         float[] notes = {293.66f, 369.99f, 440f, 587.33f};
         for (int i = 0; i < notes.length; i++)
             sound.strikeLater(notes[on ? i : notes.length - 1 - i], 0.3f, 1.2f, i * 0.1f);
+    }
+
+    // ---- the three settings on the hopscotch ----
+
+    boolean soundOn() {
+        return prefs.getBoolean("sound", true);
+    }
+
+    void setSoundOn(boolean on) {
+        prefs.edit().putBoolean("sound", on).apply();
+        if (on) {
+            sound.start();
+            sound.strike(587.33f, 0.3f, 1.2f);
+        } else {
+            sound.stop();
+        }
+    }
+
+    /** The first level the watcher no longer comes to: 20, or 100 for every level up to the black drop's. */
+    int watcherTo() {
+        return prefs.getInt("watcherTo", 100);
+    }
+
+    void setWatcherTo(int n) {
+        prefs.edit().putInt("watcherTo", n).apply();
+    }
+
+    /** Easy: the game helps the finger, and a hop ordered into harm is turned aside. */
+    boolean easy() {
+        return prefs.getBoolean("easy", false);
+    }
+
+    void setEasy(boolean on) {
+        prefs.edit().putBoolean("easy", on).apply();
     }
 
     /** Whether the black drop has been beaten: the game is won, and goes on. */
@@ -320,6 +354,11 @@ public final class MainActivity extends Activity {
                 sound.strikeLater(146.83f, 0.5f, 2.2f, 0.3f);
                 sound.strikeLater(110f, 0.45f, 2.4f, 0.7f);
                 thump(true);
+                break;
+            case World.EV_SAVED:
+                // easy: a hop ordered into harm was turned aside, with a short warning tap
+                sound.knock(520f, 0.22f, 0.02f);
+                sound.knock(390f, 0.16f, 0.025f);
                 break;
             case World.EV_ECHO:
                 // the island ahead answers, softly, a moment after the landing
