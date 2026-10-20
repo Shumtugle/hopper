@@ -320,6 +320,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         makeTitle(w);
         prepareCity(w);
         w.easy = easy;
+        w.saves = easy ? World.SAVES : 0;
         levelReady = true;
     }
 
@@ -420,11 +421,10 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                     case UP_RIGHT: w.slanted(1); break;
                     case BACK: openChalk(); break;
                     case TAP: {
-                        float ex = x - Hud.eyeX(), ey = y - Hud.eyeY(aspect), my = y - Hud.eyeY(aspect);
-                        if (hudShapes != null && hudShapes.markShown && x * x + my * my < Hud.MARK_R * Hud.MARK_R * 3f) {
-                            // the prize: every level open, and every world behind the strip; tapped
-                            // again, it closes, and the game is the one written down
-                            toggleDev();
+                        float ex = x - Hud.eyeX(), ey = y - Hud.eyeY(aspect), mx = x - Hud.markX(), my = y - Hud.eyeY(aspect);
+                        if (hudShapes != null && hudShapes.markShown && mx * mx + my * my < Hud.MARK_R * Hud.MARK_R * 3f) {
+                            // the hopscotch, with its settings
+                            openChalk();
                         } else if (hudShapes != null && hudShapes.eyeShown && ex * ex + ey * ey < Hud.EYE_R * Hud.EYE_R * 2.2f) summon();
                         else if (cityShown && w.state == World.DARK) {
                             // the first tap sends the world under; the level wakes once it is gone
@@ -507,6 +507,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                     if (!dev) act.onCrowned();
                     crowned = true;
                     ending = true;
+                    makeSettings();
                 }
                 level++;
                 // a level opened for the first time grows the world by a piece
@@ -701,6 +702,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private void toggleDev() {
         dev = !dev;
         act.setDev(dev);
+        makeSettings();
         if (!dev) {
             level = Math.min(act.savedLevel(), reached);
             detourFrom = -1;
@@ -725,7 +727,13 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         // the settings along the bottom: a tap on one turns it over
         float ny = y / (aspect * 0.5f), hh = SET_W * SET_TH / (float) SET_TW / aspect;
         if (Math.abs(ny - SET_Y) < hh * 1.6f) {
-            int k = x < -1f / 6f ? 0 : x < 1f / 6f ? 1 : 2;
+            int count = crowned ? 4 : 3;
+            int k = Math.max(0, Math.min(count - 1, (int) ((x + 0.5f) * count)));
+            if (k == 3) {
+                // the prize: every level open, and every world behind the strip; or back to one's own
+                toggleDev();
+                return;
+            }
             if (k == 0) {
                 soundOn = !soundOn;
                 act.setSoundOn(soundOn);
@@ -736,6 +744,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 easy = !easy;
                 act.setEasy(easy);
                 world.easy = easy;
+                world.saves = easy ? World.SAVES : 0;
             }
             makeSettings();
             return;
@@ -949,10 +958,16 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         frame.setColor(0x99FFFFFF);
         frame.setStyle(Paint.Style.STROKE);
         frame.setStrokeWidth(3f);
-        String[] label = {soundOn ? "sound" : "no sound", watcherTo > 20 ? "watcher to 100" : "watcher to 20", easy ? "easy" : "hard"};
-        float third = SET_TW / 3f;
+        String[] label = crowned
+                ? new String[] {soundOn ? "sound" : "no sound", watcherTo > 20 ? "watcher to 100" : "watcher to 20", easy ? "easy" : "hard", dev ? "all levels" : "own levels"}
+                : new String[] {soundOn ? "sound" : "no sound", watcherTo > 20 ? "watcher to 100" : "watcher to 20", easy ? "easy" : "hard"};
+        if (crowned) p.setTextSize(32f);
+        float third = SET_TW / (float) label.length;
         Paint.FontMetrics m = p.getFontMetrics();
-        for (int k = 0; k < 3; k++) {
+        for (int k = 0; k < label.length; k++) {
+            // the prize's button burns gold
+            p.setColor(k == 3 ? 0xFFFFC060 : 0xFFFFFFFF);
+            frame.setColor(k == 3 ? 0xCCFFB040 : 0x99FFFFFF);
             float cx = third * (k + 0.5f);
             c.drawRoundRect(cx - third * 0.44f, 14f, cx + third * 0.44f, SET_TH - 14f, 40f, 40f, frame);
             c.drawText(label[k], cx, SET_TH / 2f - (m.ascent + m.descent) / 2f, p);

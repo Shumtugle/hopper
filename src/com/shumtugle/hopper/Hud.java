@@ -47,6 +47,11 @@ final class Hud {
     static final float MARK_R = 0.05f;
 
     /** The centre and size of the watcher's eye, in screen widths: the top right corner, level with the map. */
+    /** The hopscotch mark: to the left of the eye, clear of the shards in the middle. */
+    static float markX() {
+        return eyeX() - EYE_R * 2.6f;
+    }
+
     static float eyeX() {
         return 0.5f - 0.05f - EYE_R * 1.42f;
     }
@@ -75,21 +80,21 @@ final class Hud {
      * with the map; tapped, it plays the level. While it plays it stays, and its frame glows.
      */
     /**
-     * The prize for beating the black drop: a little hopscotch, chalk squares one, two, one,
-     * between the map and the eye. Tapped, it opens every level and every world.
+     * A little hopscotch, chalk squares one, two, one, between the map and the eye: tapped, it
+     * opens the hopscotch and its settings. Gold once the black drop is beaten.
      */
     private void mark(World w) {
         markShown = false;
-        if (!crowned || w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
+        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
         float fade = (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
         if (fade <= 0.01f) return;
         markShown = fade > 0.4f;
-        float x = 0f, y = eyeY(aspect), s = MARK_R * 0.32f, g = s * 2.3f;
+        float x = markX(), y = eyeY(aspect), s = MARK_R * 0.32f, g = s * 2.3f;
         float[][] at = {{0f, -g}, {-g * 0.55f, 0f}, {g * 0.55f, 0f}, {0f, g}};
         for (float[] p : at) {
             square(x + p[0], y + p[1], s * 1.25f, 1f, 0f, 0.02f, 0.02f, 0.03f, 0.6f * fade);
-            // gold while the open mode is on, chalk while it is off
-            if (open) frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 1f, 0.72f, 0.25f, 0.95f * fade);
+            // gold for the one who beat the black drop, chalk for everyone else
+            if (crowned) frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 1f, 0.72f, 0.25f, 0.95f * fade);
             else frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 0.92f, 0.9f, 0.84f, 0.85f * fade);
         }
     }
@@ -390,6 +395,15 @@ final class Hud {
                     taken ? 0.35f : col[0], taken ? 0.35f : col[1], taken ? 0.38f : col[2], taken ? 0.5f : 0.95f);
         }
         if (w.beads > 0) square(x0 + n * step + 0.01f, y, size * 1.1f, 1f, 0f, 0.92f, 0.94f, 1f, 0.95f);
+        if (w.easy) {
+            // easy: how many more times the game will turn a hop aside, as small rings under the shards
+            float ry = y - 0.04f;
+            for (int k = 0; k < World.SAVES; k++) {
+                boolean spare = k < w.saves;
+                frameAround((k - (World.SAVES - 1) * 0.5f) * 0.035f, ry, spare ? 0.009f : 0.006f, 0.0025f, 0.7071f, 0.7071f,
+                        0.8f, 0.95f, 0.85f, spare ? 0.85f : 0.25f);
+            }
+        }
     }
 
     private void veil(World w) {

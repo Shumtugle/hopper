@@ -140,9 +140,12 @@ final class World {
      * Easy: the game helps the finger. A hop ordered into the liquid, onto a mirage, onto a hot
      * plate with no bead or over one, is turned aside: a leap into a hop, a slant into a straight
      * hop, and if that is no better, a bounce on the spot; a spring that would throw it into the
-     * liquid only bounces it.
+     * liquid only bounces it. Three times a try: the fourth mistake is let through.
      */
     boolean easy;
+    /** Easy turns a hop aside this many times in a try; after that a mistake is a mistake. */
+    int saves;
+    static final int SAVES = 3;
     /** The watcher plays against the black drop, choosing at each landing. */
     private boolean watchBoss;
     /** The black drop of the hundredth level, or null. */
@@ -965,7 +968,8 @@ final class World {
 
     /** Easy: turns a planned hop that would end in harm into the nearest one that would not. */
     private void guard() {
-        if (!harmful(move)) return;
+        if (saves <= 0 || !harmful(move)) return;
+        saves--;
         if (move[2] == LEAP) {
             move[0] /= 2;
             move[1] /= 2;

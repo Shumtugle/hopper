@@ -110,13 +110,14 @@ leap, it stops and looks up, its rim flaring: that is the moment.
 The watcher can fight it for you, as everywhere else.
 
 Beat it, and the world you grew turns to gold in a rose dawn. The game is won,
-and the levels go on; from then on a little hopscotch stands between the map
-and the eye. Tapped, it opens the open mode: every level, and behind the strip
-the world as it stood at each number. Tapped again, it closes.
+and the levels go on; the hopscotch mark beside the eye turns gold, and the
+hopscotch gains a gold button for the open mode: every level, and behind the
+strip the world as it stood at each number.
 
 ## Settings
 
-Along the bottom of the hopscotch, three chalk buttons; a tap turns one over.
+The hopscotch opens from the little chalk hopscotch beside the eye, or by Back.
+Along its bottom, chalk buttons; a tap turns one over.
 
 - **Sound** or **no sound**.
 - **Watcher to 20** or **watcher to 100**: the levels the eye comes to, the black
@@ -125,6 +126,10 @@ Along the bottom of the hopscotch, three chalk buttons; a tap turns one over.
   onto a mirage or a hot plate, or over one, is turned aside with a short
   warning tap: a leap becomes a hop, a slant a straight hop, or the drop bounces
   where it is; a spring that would throw it into the liquid only bounces it.
+  Three times a try, shown as small rings under the shards: the fourth mistake
+  is a mistake.
+- After the black drop is beaten, a fourth, gold: **all levels** or **own
+  levels**, the open mode.
 
 ## The developer's mode
 

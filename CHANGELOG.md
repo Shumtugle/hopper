@@ -1,5 +1,13 @@
 # Changes
 
+## 1.7.1
+
+- A little chalk hopscotch beside the eye opens the hopscotch and its settings,
+  for everyone; it turns gold once the black drop is beaten, and the open mode
+  becomes a fourth, gold button among the settings.
+- Easy helps three times a try, shown as small rings under the shards; the
+  fourth mistake is let through.
+
 ## 1.7
 
 - Settings, three chalk buttons along the bottom of the hopscotch: sound or no
