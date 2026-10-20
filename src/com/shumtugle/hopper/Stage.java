@@ -323,7 +323,11 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         if (steps == 4) accum = 0;
 
         int n = w.takeEvents(events);
-        for (int i = 0; i < n; i++) act.onWorldEvent(events[i], w);
+        for (int i = 0; i < n; i++) {
+            act.onWorldEvent(events[i], w);
+            // a new act has risen: its number takes the title's place
+            if (events[i] == World.EV_RISEN) makeTitle(w);
+        }
 
         if (w.finished()) {
             boolean won = w.state == World.WIN;
@@ -401,7 +405,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(liquid, "uLevel"), World.LIQUID_Y);
         GLES30.glUniform3f(loc(liquid, "uGrid"), w.gridX0, w.gridZ0, w.gridSize);
         GLES30.glUniform3f(loc(liquid, "uEye"), eye[0], eye[1], eye[2]);
-        GLES30.glUniform1f(loc(liquid, "uFilm"), 0f);
+        GLES30.glUniform1f(loc(liquid, "uFilm"), w.film);
         flat(liquidBuf);
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
     }
@@ -419,7 +423,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(loc(scene, "uMvp"), 1, false, mvp, 0);
         GLES30.glUniform3f(loc(scene, "uEye"), eye[0], eye[1], eye[2]);
         GLES30.glUniform1f(loc(scene, "uTime"), w.time);
-        GLES30.glUniform1f(loc(scene, "uFilm"), 0f);
+        GLES30.glUniform1f(loc(scene, "uFilm"), w.film);
         drawMesh(islandBuf, islandVerts);
         drawMesh(movingBuf, movingVerts);
         drawMesh(farBuf, farVerts);
@@ -558,7 +562,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     /** The level's number and its hint, for the first seconds of every try. */
     private void drawTitle(World w) {
         float a;
-        float t = w.awake - 1.2f;
+        float t = w.act > 0 ? w.actAge : w.awake - 1.2f;
         if (t < 0f) return;
         if (t < 0.4f) a = t / 0.4f;
         else a = 1f - World.smooth(3.2f, 4.2f, t);
@@ -590,12 +594,15 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         p.setTextAlign(Paint.Align.CENTER);
         p.setTypeface(Typeface.create(Typeface.SERIF, Typeface.ITALIC));
         p.setTextSize(170f);
-        c.drawText(String.valueOf(w.index + 1), TITLE_W / 2f, 175f, p);
-        if (w.level.hint.length() > 0) {
+        String[] roman = {"I", "II", "III", "IV"};
+        String big = w.act > 0 ? roman[Math.min(3, w.act)] : String.valueOf(w.index + 1);
+        String hint = w.act > 0 ? "the ground has shifted" : w.level.hint;
+        c.drawText(big, TITLE_W / 2f, 175f, p);
+        if (hint.length() > 0) {
             p.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));
             p.setTextSize(52f);
             p.setLetterSpacing(0.06f);
-            c.drawText(w.level.hint, TITLE_W / 2f, 300f, p);
+            c.drawText(hint, TITLE_W / 2f, 300f, p);
         }
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, titleTex);
         linear();

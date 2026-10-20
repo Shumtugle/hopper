@@ -270,6 +270,16 @@ final class Hud {
 
     private void pips(World w) {
         if (w.state == World.DARK || w.state == World.RISE) return;
+        int left = w.tremorLeft();
+        if (left >= 0) {
+            // the count before the ground shifts: three diamonds, one going out at every landing
+            float y = aspect * 0.5f - 0.2f, pulse = 0.6f + 0.4f * (float) Math.sin(w.time * 9f);
+            for (int k = 0; k < 3; k++) {
+                boolean lit = k < left;
+                square(-0.06f + k * 0.06f, y, lit ? 0.016f : 0.01f, 0.7071f, 0.7071f,
+                        1f, lit ? 0.55f : 0.3f, lit ? 0.25f : 0.3f, lit ? pulse : 0.35f);
+            }
+        }
         int n = w.shardsTotal;
         float step = 0.045f, size = 0.011f;
         float y = aspect * 0.5f - 0.13f;

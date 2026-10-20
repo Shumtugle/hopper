@@ -1,5 +1,12 @@
 # Changes
 
+## 1.2.1
+
+- A shift you cannot miss: the ground trembles harder and the eye with it,
+  three diamonds count the last landings down, and as the old act goes under
+  the eye rises over the board to watch the new one come up, then returns.
+- Every act wears a colour of its own, and its number is shown when it stands.
+
 ## 1.2
 
 - Shifting levels: from the sixteenth on, about one in four comes in two or

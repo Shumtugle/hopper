@@ -26,7 +26,7 @@ final class Mesh {
     }
 
     static int dynamicCapacity(World w) {
-        return w.type.length * (3 * BOX + SPHERE) + 8 * BOX;
+        return w.type.length * (3 * BOX + SPHERE) + 8 * BOX + SPHERE;
     }
 
     /**
@@ -79,7 +79,7 @@ final class Mesh {
                     }
                     if (w.tremor > 0f && i != w.keep) {
                         // before a shift every island shudders, each a little out of step
-                        float shake = (float) Math.sin(w.time * 31f + i * 1.7f) * 0.03f * w.tremor;
+                        float shake = (float) Math.sin(w.time * 31f + i * 1.7f) * 0.07f * w.tremor;
                         for (int k = first; k < v; k++) out[k * FLOATS + 1] += shake;
                     }
                     if (w.sink[i] > 0f) {
@@ -104,6 +104,10 @@ final class Mesh {
         float time = w.time;
         int seen = 0;
         float lift = w.lift();
+        if (w.lift > 0.05f) {
+            // seen from above through a shift, the drop itself is there to be found
+            v = sphere(out, v, w.x, w.y + 0.14f, w.z, 0.14f);
+        }
         for (int f = 0; f < w.floors; f++)
             for (int z = 0; z < w.rows; z++)
                 for (int x = 0; x < w.cols; x++) {

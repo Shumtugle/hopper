@@ -70,6 +70,12 @@ final class World {
     /** 0 while the ground holds; 1 while the old act goes down; 2 while the new one comes up. */
     int shift;
     private float shiftAge;
+    /** How far the eye has left the drop to watch a shift from above, 0 to 1. */
+    float lift;
+    /** The shift in oxide film the current act wears, eased; every act has its own colour. */
+    float film;
+    /** Seconds since the last act rose; the stage shows the act's number for a while after. */
+    float actAge = 99f;
     /** The island the drop stands on through a shift; it alone stays up. */
     int keep = -1;
     /** Set by the stage: grow the next act on a thread of its own instead of in the frame. */
@@ -243,26 +249,34 @@ final class World {
         awake += dt;
         mapAge += dt;
         if (shift == 1) {
-            // the old act goes down; once the next one is grown, it comes up
+            // the eye goes up to watch; the old act goes down; once the next one is grown, it comes up
             shiftAge += dt;
-            rise = 1f - smooth(0f, 0.9f, shiftAge);
+            lift = smooth(0f, 0.8f, shiftAge);
+            rise = 1f - smooth(0.4f, 1.4f, shiftAge);
             version++;
-            if (shiftAge >= 0.9f && nextAct != null) swapAct();
+            if (shiftAge >= 1.5f && nextAct != null) swapAct();
         } else if (shift == 2) {
             shiftAge += dt;
-            rise = smooth(0.1f, 1.6f, shiftAge);
+            rise = smooth(0.1f, 1.7f, shiftAge);
+            lift = 1f - smooth(2.1f, 2.9f, shiftAge);
             version++;
-            if (shiftAge >= 1.6f) {
+            if (shiftAge >= 2.9f) {
                 rise = 1f;
+                lift = 0f;
                 shift = 0;
                 keep = -1;
                 mapAge = 0f;
+                actAge = 0f;
                 emit(EV_RISEN);
             }
         }
+        actAge += dt;
+        // the new act's colour seeps in as it rises
+        float tint = actFilm(act);
+        film += (tint - film) * Math.min(1f, dt * 1.6f);
         if (tremorFrom >= 0 && shift == 0) {
             float t = (actHops - tremorFrom + (state == PLAY ? hopPhase() : 0f)) / 3f;
-            tremor = Math.min(1f, Math.max(0f, t)) * 0.7f + 0.3f;
+            tremor = Math.min(1f, Math.max(0f, t)) * 0.6f + 0.4f;
             version++;
             // the black surface shivers round the islands
             if (((int) (time * 9f)) != ((int) ((time - dt) * 9f))) {
@@ -556,6 +570,16 @@ final class World {
         }
     }
 
+    /** The film shift of act k: each act wears a colour of its own. */
+    static float actFilm(int k) {
+        return k == 0 ? 0f : k == 1 ? 170f : 330f;
+    }
+
+    /** Landings left before the ground shifts, while it trembles; -1 when it does not. */
+    int tremorLeft() {
+        return tremorFrom < 0 || shift != 0 ? -1 : Math.max(0, tremorFrom + 3 - actHops);
+    }
+
     /** The old act is down: the new one takes its place, still under the liquid, and starts to rise. */
     private void swapAct() {
         level = nextAct;
@@ -685,6 +709,24 @@ final class World {
         eye[2] = z - fz * BACK;
         if (!looked) aim(look);
         System.arraycopy(look, 0, at, 0, 3);
+        if (tremor > 0f) {
+            // the drop feels the ground tremble
+            eye[0] += (float) Math.sin(time * 43f) * 0.012f * tremor;
+            eye[1] += (float) Math.sin(time * 57f + 1f) * 0.016f * tremor;
+        }
+        if (lift > 0f) {
+            // through a shift the eye leaves the drop, rises behind it and looks down on the whole board
+            float k = lift * lift * (3f - 2f * lift);
+            float cx = (cols - 1) * 0.5f, cz = (rows - 1) * 0.5f;
+            float reach = Math.max(cols, rows);
+            float ux = cx - fx * reach * 0.6f, uy = top(floors - 1) + reach * 0.45f + 1.6f, uz = cz - fz * reach * 0.6f;
+            eye[0] += (ux - eye[0]) * k;
+            eye[1] += (uy - eye[1]) * k;
+            eye[2] += (uz - eye[2]) * k;
+            at[0] += (cx - at[0]) * k;
+            at[1] += (top(floors - 1) * 0.4f - at[1]) * k;
+            at[2] += (cz - at[2]) * k;
+        }
     }
 
     /** Where the eye wants to look right now. */
