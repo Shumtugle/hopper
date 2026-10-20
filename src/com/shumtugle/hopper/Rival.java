@@ -16,7 +16,7 @@ import java.util.Random;
  */
 final class Rival {
     /** Chances, at a landing, to bounce on the spot, to step aside and back, to slip into the liquid. */
-    static final float HESITATE = 0.4f, STRAY = 0.08f, SLIP = 0.02f;
+    static final float HESITATE = 0.45f, STRAY = 0.09f, SLIP = 0.022f;
 
     private static final int[] DX = {0, 1, 0, -1}, DZ = {-1, 0, 1, 0};
     /** Set by the game: work the way out on a thread. The bench leaves it off and waits. */
@@ -37,11 +37,11 @@ final class Rival {
     Rival(final int index, int number, boolean async) {
         this.index = index;
         this.number = number;
-        pace = 0.86f - 0.06f * number;
+        pace = 0.8f - 0.05f * number;
         // every try its own: a person does not make the same slips twice in a row
         rnd = new Random(index * 7919L + number * 104729L + 31L * made++);
         // it drops in a moment after the player, the second a moment after the first
-        wait = 2.6f + 0.7f * number;
+        wait = 3.6f + 0.9f * number;
         if (async) {
             Thread t = new Thread(new Runnable() {
                 @Override

@@ -1,5 +1,10 @@
 # Changes
 
+## 1.5.1
+
+- Rivals are clumsier: slower, more often in doubt, more often in the liquid,
+  and they drop in a little later.
+
 ## 1.5
 
 - Rivals: from the thirty-sixth level on, about one level in four brings a
