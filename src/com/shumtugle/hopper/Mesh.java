@@ -54,12 +54,17 @@ final class Mesh {
                         // a mirage is dressed exactly like a plain island; only its reflection gives it away
                         float film = (t == Level.SPRING ? 520f : t == Level.GATE ? 330f : 250f) + jitter + f * 60f;
                         float shade = t == Level.HOT ? HOT : 1f;
+                        // an island taken out of turn turns into a funnel: its steps open upwards and go dark
+                        float m = i == w.funnel && w.state == World.FUNNEL ? World.smooth(0f, 0.7f, w.stateAge) : 0f;
+                        if (m > 0f) shade *= 1f - 0.85f * m;
                         for (int k = 0; k < 3; k++) {
                             float a, top, bottom;
                             if (f == 0) {
                                 a = 0.26f + k * 0.065f;
                                 top = h - k * 0.085f;
                                 bottom = -1.6f;
+                                a += (0.39f - k * 0.07f - a) * m;
+                                top += (h - k * 0.1f - top) * m;
                             } else {
                                 // hanging steps: the widest at the top, narrowing downwards
                                 a = 0.39f - k * 0.07f;
@@ -69,7 +74,7 @@ final class Mesh {
                             v = box(out, v, x, (top + bottom) * 0.5f, z, a, (top - bottom) * 0.5f, a,
                                     film + k * 26f, t == Level.HOT ? HOT : shade * (1f - k * 0.12f));
                         }
-                        float rimSize = f == 0 ? 0.26f : 0.39f;
+                        float rimSize = f == 0 ? 0.26f + (0.39f - 0.26f) * m : 0.39f;
                         v = rim(out, v, x, h, z, rimSize, 0.045f, 0.05f, film - 40f, t == Level.HOT ? HOT : 1.05f);
                     }
                     if (w.rise < 1f) {
@@ -123,7 +128,19 @@ final class Mesh {
                         if (w.shard[i]) {
                             float hue = w.shardsTotal > 1 ? 0.9f * seen / (w.shardsTotal - 1) : 0.3f;
                             float y = base + 0.3f + 0.03f * (float) Math.sin(time * 2.1f + i);
-                            v = spunBox(out, v, x, y, z, 0.055f, time * 1.3f + i, 0.62f, hue, GLOW);
+                            float size = 0.055f;
+                            if (w.level.order != null && w.level.order[i] >= 0) {
+                                // in a level with an order each shard beats at its own pace, the lowest note slowest
+                                float period = World.humPeriod(w.level.order[i]);
+                                float phase = (time % period) / period, beat = Math.max(0f, 1f - phase * 4f);
+                                size *= 1f + 0.6f * beat * beat;
+                            }
+                            // the wrong shard goes out at once, before the funnel takes the island
+                            if (i == w.funnel && w.state == World.FUNNEL) {
+                                size *= Math.max(0f, 1f - w.stateAge / 0.1f);
+                                if (size <= 0f) { seen++; continue; }
+                            }
+                            v = spunBox(out, v, x, y, z, size, time * 1.3f + i, 0.62f, hue, GLOW);
                         }
                         seen++;
                     }

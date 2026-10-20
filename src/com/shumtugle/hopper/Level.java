@@ -37,6 +37,11 @@ final class Level {
     final String hint;
     /** The fewest hops that win, when the maze maker has worked it out; -1 otherwise. */
     int hops = -1;
+    /**
+     * In a level with an order, each shard's place in it, 0 first; -1 elsewhere. Null in a level
+     * where shards may be taken as they come.
+     */
+    int[] order;
 
     /** A level with one floor, drawn as its rows. */
     Level(String hint, String... map) {

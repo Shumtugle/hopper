@@ -314,6 +314,9 @@ final class Hud {
                 a = Math.min(1f, 0.55f + k);
                 break;
             }
+            case World.FUNNEL:
+                a = World.smooth(0.45f, 1.4f, w.stateAge);
+                break;
             case World.WIN: {
                 // up into white, then the white slowly goes out to the black the next level starts in
                 float dusk = 1f - World.smooth(1.3f, 2.9f, w.stateAge);

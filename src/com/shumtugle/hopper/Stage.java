@@ -52,6 +52,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private String marks;
     private float lastMoveY;
 
+    // a funnel's detour: the level it poured the drop out of, how often, and where it went last
+    private int detourFrom = -1, funnels, funnelsFor = -1, lastDetour = -1;
+
     // the watcher's way, worked out on its own thread
     private volatile int[] way;
     private volatile int wayFor = -1;
@@ -329,7 +332,31 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             if (events[i] == World.EV_RISEN) makeTitle(w);
         }
 
-        if (w.finished()) {
+        if (w.finished() && w.state == World.FUNNEL) {
+            // the funnel pours the drop into a level already played; won, it pours it back
+            if (funnelsFor != level) {
+                funnelsFor = level;
+                funnels = 0;
+            }
+            funnels++;
+            int past = Maze.detour(level, funnels, reached, lastDetour);
+            if (past >= 0) {
+                detourFrom = level;
+                lastDetour = past;
+                level = past;
+            }
+            world = new World(level, false);
+            prepareLevel();
+            w = world;
+        } else if (w.finished() && w.state == World.WIN && detourFrom >= 0) {
+            marks = act.onSolved(level, w.pilot != null);
+            level = detourFrom;
+            detourFrom = -1;
+            act.onLevel(level);
+            world = new World(level, false);
+            prepareLevel();
+            w = world;
+        } else if (w.finished()) {
             boolean won = w.state == World.WIN;
             boolean watched = won && w.pilot != null;
             if (won) {
@@ -337,7 +364,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 level++;
                 reached = Math.max(reached, level);
             }
-            act.onLevel(level);
+            // a detour remembers where it leads back to, should the game be closed half way
+            act.onLevel(detourFrom >= 0 ? detourFrom : level);
             // a new level waits in the dark for its tap; a level tried again rises at once
             world = new World(level, won);
             prepareLevel();
@@ -440,6 +468,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         if (index == -1) return;
         chalk.close();
         chalkOpen = false;
+        if (index >= 0) detourFrom = -1;
         if (index >= 0 && (index != level || world.state != World.DARK)) {
             level = index;
             act.onLevel(level);
@@ -596,7 +625,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         p.setTextSize(170f);
         String[] roman = {"I", "II", "III", "IV"};
         String big = w.act > 0 ? roman[Math.min(3, w.act)] : String.valueOf(w.index + 1);
-        String hint = w.act > 0 ? "the ground has shifted" : w.level.hint;
+        String hint = w.act > 0 ? "the ground has shifted"
+                : detourFrom >= 0 ? "win it, and the funnel pours you back to " + (detourFrom + 1) : w.level.hint;
         c.drawText(big, TITLE_W / 2f, 175f, p);
         if (hint.length() > 0) {
             p.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));

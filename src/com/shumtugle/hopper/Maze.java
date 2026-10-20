@@ -22,6 +22,11 @@ import java.util.Random;
  * from the cell the drop stands on when the ground shifts, with the same seed every time for the
  * same level, act and cell, so it is checked by the solver like any level. Only the last act has
  * the gate; shards not taken in time move on to the next act.
+ *
+ * Some levels have an order: from the twentieth on, about one in seven. Their shards must be
+ * taken from the lowest note to the highest, which is the order the way through meets them. A
+ * shard taken out of turn turns its island into a funnel that pours the drop into a level
+ * already played; won, that level pours it back.
  */
 final class Maze {
     private Maze() {}
@@ -58,6 +63,32 @@ final class Maze {
         return (int) ((seed(n) >>> 33) % 4) == 0;
     }
 
+    /** True if level n's shards must be taken in an order. */
+    static boolean ordered(int n) {
+        if (n < 19 || n < Level.drawn() || breather(n) || staged(n)) return false;
+        return (int) ((seed(n) >>> 29) % 7) == 0;
+    }
+
+    /**
+     * The level a funnel pours the drop into, the attempt-th time it falls in level n: one of the
+     * last twenty played, the recent more often than the old; never a drawn level, never a level
+     * with an order, never avoid (the one it came from last time). -1 if there is none.
+     */
+    static int detour(int n, int attempt, int reached, int avoid) {
+        int lo = Math.max(Level.drawn(), reached - 20), hi = reached - 1;
+        int total = 0;
+        for (int k = lo; k <= hi; k++) if (k != n && k != avoid && !ordered(k)) total += k - lo + 1;
+        if (total == 0) return -1;
+        Random r = new Random(seed(n) ^ (attempt * 0x5851F42D4C957F2DL));
+        int pick = r.nextInt(total);
+        for (int k = lo; k <= hi; k++) {
+            if (k == n || k == avoid || ordered(k)) continue;
+            pick -= k - lo + 1;
+            if (pick < 0) return k;
+        }
+        return -1;
+    }
+
     static int acts(int n) {
         return staged(n) ? (step(n) >= SHARDS ? 3 : 2) : 1;
     }
@@ -85,6 +116,8 @@ final class Maze {
         int cols, rows, floors, x, z, f;
         int shards;
         boolean gate = true;
+        /** The shards must be taken in the order the way meets them. */
+        boolean ordered;
     }
 
     /** The fewest hops a level of this step should take. */
@@ -112,7 +145,9 @@ final class Maze {
         } else {
             want = target(step) + r.nextInt(5) - 2;
             shape.shards = shardsFor(step);
-            hint = breather(n) ? "a breather" : "";
+            shape.ordered = ordered(n);
+            hint = shape.ordered ? "the shards sing: take them from the lowest note up"
+                    : breather(n) ? "a breather" : "";
         }
         Level best = pick(r, step, want, hint, shape, 40);
         // never needed in practice; a plain line keeps the game going if it ever is
@@ -313,7 +348,15 @@ final class Maze {
                 for (int xx = 0; xx < cols; xx++) s.append(cell[at(xx, zz, ff)]);
                 map[ff][zz] = s.toString();
             }
-        return new Level(hint, map);
+        Level made = new Level(hint, map);
+        if (shape.ordered) {
+            // the order is the way's: the first shard it meets is the lowest note
+            made.order = new int[n];
+            java.util.Arrays.fill(made.order, -1);
+            int rank = 0;
+            for (int i = 0; i <= last; i++) if (cell[path.get(i)] == '*') made.order[path.get(i)] = rank++;
+        }
+        return made;
     }
 
     private static boolean neighbour(int x, int z, int f) {

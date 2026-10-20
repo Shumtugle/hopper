@@ -63,6 +63,14 @@ final class Solver {
         }
         if (n > (1 << CELL) || shards > SHARDS || beads > BEADS || glass > GLASS || hot > HOT) return null;
         long allShards = (1L << shards) - 1;
+        // in a level with an order, each shard needs every lower one taken first
+        long[] needs = new long[n];
+        if (l.order != null)
+            for (int i = 0; i < n; i++) {
+                if (shardBit[i] < 0) continue;
+                for (int j = 0; j < n; j++)
+                    if (shardBit[j] >= 0 && l.order[j] >= 0 && l.order[j] < l.order[i]) needs[i] |= 1L << shardBit[j];
+            }
         // an act of a shifting level has no gate: there the win is all its shards
         boolean gate = false;
         for (int i = 0; i < n; i++) if (l.type[i] == Level.GATE) gate = true;
@@ -111,7 +119,11 @@ final class Solver {
                     held = true;
                     ns |= 1L << (AT_BEADS + beadBit[t]);
                 }
-                if (shardBit[t] >= 0) ns |= 1L << (AT_SHARDS + shardBit[t]);
+                if (shardBit[t] >= 0 && (ns >>> (AT_SHARDS + shardBit[t]) & 1) == 0) {
+                    // out of turn, the island turns into a funnel: not a way through
+                    if (((ns >>> AT_SHARDS) & needs[t]) != needs[t]) continue;
+                    ns |= 1L << (AT_SHARDS + shardBit[t]);
+                }
                 ns = held ? ns | 1L << AT_HELD : ns & ~(1L << AT_HELD);
                 ns = (ns & ~((1L << CELL) - 1)) | t;
                 boolean all = ((ns >>> AT_SHARDS) & allShards) == allShards;

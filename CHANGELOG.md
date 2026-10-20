@@ -1,5 +1,14 @@
 # Changes
 
+## 1.3
+
+- Order levels: rare, from the twenty-eighth on. Their shards must be taken in
+  a hidden order. Each one hums when the drop is near, the first lowest and
+  slowest, each next one higher and quicker.
+- A shard taken out of turn opens its island into a funnel. The drop goes down
+  into one of the recent levels already won; win it, and the funnel pours the
+  drop back to the level it fell from.
+
 ## 1.2.1
 
 - A shift you cannot miss: the ground trembles harder and the eye with it,

@@ -143,6 +143,12 @@ public final class MainActivity extends Activity {
 
     /** Called on the render thread for every event the world raised this frame. */
     void onWorldEvent(int event, World w) {
+        if (event >= World.EV_HUM) {
+            // a shard humming: its note by its place in the order, soft, louder when near
+            int rank = (event - World.EV_HUM) / 16, loud = (event - World.EV_HUM) % 16;
+            sound.strike(SCALE[Math.min(SCALE.length - 1, rank)], 0.03f + 0.17f * loud / 15f, 0.8f);
+            return;
+        }
         switch (event) {
             case World.EV_LAND:
                 // a knock on bismuth, its pitch nudged a little by where it lands
@@ -224,6 +230,13 @@ public final class MainActivity extends Activity {
             case World.EV_RISEN:
                 sound.strike(293.66f, 0.3f, 1.6f);
                 sound.strikeLater(440f, 0.25f, 1.4f, 0.15f);
+                break;
+            case World.EV_FUNNEL:
+                // the wrong note: the island opens under the drop and it goes down, far down
+                sound.thud(330f, 38f, 0.7f, 1.6f);
+                sound.strike(77.78f, 0.5f, 2.2f);
+                sound.strikeLater(69.3f, 0.4f, 2.4f, 0.6f);
+                thump(true);
                 break;
             case World.EV_BONK:
                 // the drop meets a wall too high to climb

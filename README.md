@@ -30,6 +30,12 @@ trembles for three bounces, then everything but the island under you goes down
 into the liquid and a new act rises around you. Shards you did not reach move on
 to the next act; the gate waits in the last one.
 
+Rarer levels keep an **order**. Their shards must be taken one after another,
+and the only clue is sound: near the drop each shard hums, the first one lowest
+and slowest, each next one higher and quicker. Take one out of turn and its
+island opens into a funnel down into a level you have already won; win that one
+and the funnel pours you back.
+
 The first ten levels are drawn by hand. Every level after them is grown from
 its own number: a walk through the floors that obeys every rule becomes the way
 through, so each level can be won, and a solver picks the grown candidate whose

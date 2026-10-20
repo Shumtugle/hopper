@@ -22,19 +22,25 @@ package com.shumtugle.hopper;
  * and the next act rises in its place, grown from that island. The drop bounces on the spot the
  * while. Shards left behind move on to the next act; only the last one has the gate.
  *
+ * In a level with an order the shards hum when the drop is near, each at its own note and its
+ * own beat, the lowest slowest. A shard taken out of turn turns its island into a funnel; the
+ * drop goes down it, and the stage pours it into a level already played.
+ *
  * The watcher can play a level instead: it is handed the solver's moves and, at each landing,
  * orders the next hop exactly as a finger would (a turn, a step, a leap, a slant). A swipe takes
  * the drop back from it.
  */
 final class World {
     // states
-    static final int FALL_IN = 0, PLAY = 1, DROWN = 2, BURN = 3, WIN = 4, DARK = 5, RISE = 6;
+    static final int FALL_IN = 0, PLAY = 1, DROWN = 2, BURN = 3, WIN = 4, DARK = 5, RISE = 6, FUNNEL = 7;
 
     // events for sound and touch feedback
     static final int EV_LAND = 1, EV_LAND_GLASS = 2, EV_LAND_SPRING = 3, EV_SHARD = 4, EV_BEAD = 5,
             EV_COOL = 6, EV_OPEN = 7, EV_WIN = 8, EV_DROWN = 9, EV_BURN = 10, EV_SINK = 11, EV_TURN = 12,
             EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16, EV_TREMOR = 17, EV_SHIFT = 18,
-            EV_RISEN = 19;
+            EV_RISEN = 19, EV_FUNNEL = 20;
+    /** A shard humming: EV_HUM + rank * 16 + loudness, 1 to 15. */
+    static final int EV_HUM = 1000;
 
     // kinds of hop
     static final int STILL = 0, HOP = 1, LEAP = 2, THROW = 3;
@@ -76,6 +82,10 @@ final class World {
     float film;
     /** Seconds since the last act rose; the stage shows the act's number for a while after. */
     float actAge = 99f;
+    /** The island that has turned into a funnel, or -1. */
+    int funnel = -1;
+    /** When each shard last hummed, in seconds of play. */
+    private float[] hummed;
     /** The island the drop stands on through a shift; it alone stays up. */
     int keep = -1;
     /** Set by the stage: grow the next act on a thread of its own instead of in the frame. */
@@ -348,6 +358,11 @@ final class World {
             case WIN:
                 y += dt * (1.5f + stateAge * 3f);
                 break;
+            case FUNNEL:
+                // the island narrows into a funnel and the drop goes down through it
+                y -= dt * (0.15f + stateAge * 0.9f);
+                version++;
+                break;
         }
         aim(aim);
         if (!looked) {
@@ -356,6 +371,8 @@ final class World {
         }
         float k = Math.min(1f, dt * 7f);
         for (int j = 0; j < 3; j++) look[j] += (aim[j] - look[j]) * k;
+
+        if (level.order != null && (state == PLAY || state == FALL_IN)) hum();
 
         // a slow rain of single drops keeps the black surface alive
         if (((int) (time * 0.7f)) != ((int) ((time - dt) * 0.7f))) {
@@ -371,6 +388,7 @@ final class World {
         if (state == DROWN) return stateAge > 1.6f;
         if (state == BURN) return stateAge > 1.4f;
         if (state == WIN) return stateAge > 3.1f;
+        if (state == FUNNEL) return stateAge > 2.2f;
         return false;
     }
 
@@ -448,6 +466,15 @@ final class World {
             bead[i] = false;
             beads = 1;
             emit(EV_BEAD);
+        }
+        if (shard[i] && level.order != null && level.order[i] != shardsTotal - shardsLeft) {
+            // out of turn: the island becomes a funnel
+            state = FUNNEL;
+            stateAge = 0f;
+            funnel = i;
+            pilot = null;
+            emit(EV_FUNNEL);
+            return;
         }
         if (shard[i]) {
             shard[i] = false;
@@ -567,6 +594,28 @@ final class World {
             t.start();
         } else {
             job.run();
+        }
+    }
+
+    /** How long between hums of the shard of this rank: the lowest note slowest. */
+    static float humPeriod(int rank) {
+        return Math.max(0.45f, 1.5f - rank * 0.3f);
+    }
+
+    /** Shards near the drop hum, each at its beat; the nearer, the louder. */
+    private void hum() {
+        if (hummed == null) hummed = new float[type.length];
+        for (int i = 0; i < type.length; i++) {
+            if (!shard[i] || level.order[i] < 0) continue;
+            int plane = cols * rows, f = i / plane, cz = i % plane / cols, cx = i % plane % cols;
+            float dx = cx - x, dz = cz - z, dy = (top(f) - y) / Level.FLOOR;
+            float d = (float) Math.sqrt(dx * dx + dz * dz + dy * dy);
+            if (d > 2.6f) continue;
+            int rank = level.order[i];
+            if (time - hummed[i] < humPeriod(rank)) continue;
+            hummed[i] = time;
+            int loud = Math.max(1, Math.min(15, Math.round(15f * (1f - d / 2.6f))));
+            emit(EV_HUM + rank * 16 + loud);
         }
     }
 
