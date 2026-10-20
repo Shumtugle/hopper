@@ -2,7 +2,8 @@ package com.shumtugle.hopper;
 
 /**
  * Flat shapes drawn over the scene: a small map in the top left corner that turns with the drop, so "up" on it is
- * always "ahead"; a row of pips for the shards; a veil for falling in and out of a level.
+ * always "ahead"; the watcher's eye beside it; a row of pips for the shards; a veil for falling in
+ * and out of a level; and the hopscotch of all levels.
  *
  * Six floats a vertex: clip x, clip y, r, g, b, a. Lengths are measured in screen widths.
  */
@@ -22,16 +23,154 @@ final class Hud {
     }
 
     static int capacity(World w) {
-        return (w.type.length * 3 + 80) * 6;
+        return Math.max((w.type.length * 3 + 140) * 6, 6000);
     }
+
+    /** Set by the stage before each build: the watcher is working out the way. */
+    boolean thinking;
+    /** Read by the stage after each build: whether the eye is there to be tapped. */
+    boolean eyeShown;
+    /** Seconds, for the eye's blinking and the new square's pulse. */
+    float clock;
+
+    /** The centre and size of the watcher's eye, in screen widths. */
+    static float eyeX() {
+        return 0.02f;
+    }
+
+    static float eyeY(float aspect) {
+        return aspect * 0.5f - 0.29f;
+    }
+
+    static final float EYE_R = 0.07f;
 
     /** Builds this frame's shapes; returns the vertex count. aspect is screen height over width. */
     int build(World w, float aspect) {
         this.aspect = aspect;
         v = 0;
         map(w);
+        watcher(w);
         pips(w);
         veil(w);
+        return v;
+    }
+
+    /**
+     * The watcher: an eye in a stepped frame of bismuth, set on its corner. It comes and goes
+     * with the map; tapped, it plays the level. While it plays it stays, and its frame glows.
+     */
+    private void watcher(World w) {
+        eyeShown = false;
+        if (w.state == World.DARK || w.state == World.RISE) return;
+        boolean playing = w.pilot != null;
+        float fade = playing || thinking ? 1f
+                : (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
+        if (fade <= 0.01f) return;
+        eyeShown = fade > 0.4f && !playing;
+        float x = eyeX(), y = eyeY(aspect), r = EYE_R;
+        float d = 0.7071f;
+        // the frame: three steps, gold, rose and sea-green, the colours of the oxide
+        float glow = playing ? 0.75f + 0.25f * (float) Math.sin(clock * 3f) : 0.8f;
+        square(x, y, r * 0.98f, d, d, 0.02f, 0.02f, 0.03f, 0.8f * fade);
+        frameAround(x, y, r, r * 0.13f, d, d, 0.84f, 0.67f, 0.25f, glow * fade);
+        frameAround(x, y, r * 0.8f, r * 0.11f, d, d, 0.77f, 0.28f, 0.59f, glow * fade);
+        frameAround(x, y, r * 0.62f, r * 0.1f, d, d, 0.2f, 0.59f, 0.63f, glow * fade);
+        // a blink every few seconds; thinking, it narrows and the iris runs through the colours
+        float phase = clock % 4.3f, open = phase < 0.18f ? Math.abs(phase / 0.09f - 1f) : 1f;
+        if (thinking) open = Math.min(open, 0.55f);
+        float ex = r * 0.4f, ey = r * 0.24f * open;
+        oval(x, y, ex, ey, 0.93f, 0.94f, 0.97f, fade);
+        if (open < 0.12f) return;
+        // the pupil looks where the next hop will land
+        float px = 0f, py = 0f;
+        if (w.state == World.PLAY) {
+            float dx = w.nextX() - w.cellX, dz = w.nextZ() - w.cellZ;
+            float cy = (float) Math.cos(w.yaw), sy = (float) Math.sin(w.yaw);
+            float ux = dx * cy + dz * sy, uy = dx * sy - dz * cy, l = (float) Math.sqrt(ux * ux + uy * uy);
+            if (l > 0f) {
+                px = ux / l * r * 0.12f;
+                py = uy / l * r * 0.06f;
+            }
+        }
+        if (thinking) {
+            px = (float) Math.cos(clock * 5f) * r * 0.1f;
+            py = (float) Math.sin(clock * 5f) * r * 0.05f;
+        }
+        float[] iris = spectrum(thinking ? (clock * 0.6f) % 0.9f : 0.62f);
+        float ir = r * 0.17f;
+        oval(x + px, y + py, ir, Math.min(ir, ey * 0.95f), iris[0] * 0.8f, iris[1] * 0.8f, iris[2] * 0.9f + 0.1f, fade);
+        oval(x + px, y + py, ir * 0.48f, Math.min(ir * 0.48f, ey * 0.6f), 0.02f, 0.02f, 0.03f, fade);
+        oval(x + px - ir * 0.3f, y + py + ir * 0.3f * open, ir * 0.16f, ir * 0.16f * open, 1f, 1f, 1f, 0.9f * fade);
+    }
+
+    /** A filled ellipse. */
+    private void oval(float x, float y, float rx, float ry, float r, float g, float b, float a) {
+        for (int k = 0; k < 20; k++) {
+            double a0 = k * Math.PI / 10, a1 = (k + 1) * Math.PI / 10;
+            tri(x, y, x + (float) Math.cos(a0) * rx, y + (float) Math.sin(a0) * ry,
+                    x + (float) Math.cos(a1) * rx, y + (float) Math.sin(a1) * ry, r, g, b, a);
+        }
+    }
+
+    // the hopscotch's numbers, for the stage to write over the squares
+    int labels;
+    final float[] labelX = new float[64], labelY = new float[64], labelA = new float[64];
+    final int[] labelN = new int[64];
+
+    /** Builds the hopscotch over a darkened scene; the numbers go to the label arrays. */
+    int buildChalk(Chalk ch, float aspect) {
+        this.aspect = aspect;
+        v = 0;
+        labels = 0;
+        float in = World.smooth(0f, 0.35f, ch.age);
+        float hw = 0.5f, hh = aspect * 0.5f;
+        quad(-hw, -hh, hw, -hh, hw, hh, -hw, hh, 0f, 0f, 0f, 0.9f * in);
+        float h = Chalk.CELL * 0.5f;
+        for (int row = ch.firstRow(); row <= ch.lastRow(); row++) {
+            float y = ch.rowY(row);
+            for (int k = 0; k < Chalk.width(row); k++) {
+                int index = Chalk.firstOf(row) + k;
+                if (index > ch.reached + Chalk.AHEAD) continue;
+                float x = Chalk.cellX(row, k);
+                // squares far up the strip fade into the black
+                float far = 1f - World.smooth(hh - 0.25f, hh + 0.05f, y);
+                float a = in * far;
+                if (a <= 0.01f) continue;
+                if (index > ch.reached) {
+                    // locked: a faint outline, fainter the further it lies
+                    float dim = 0.32f * (1f - (index - ch.reached - 1) / (float) Chalk.AHEAD);
+                    frameAround(x, y, h, 0.006f, 1f, 0f, 0.6f, 0.6f, 0.65f, dim * a);
+                    continue;
+                }
+                square(x, y, h, 1f, 0f, 0.03f, 0.03f, 0.045f, 0.9f * a);
+                if (index == ch.reached) {
+                    float pulse = 0.65f + 0.35f * (float) Math.sin(clock * 3.2f);
+                    frameAround(x, y, h, 0.012f, 1f, 0f, 1f, 1f, 1f, pulse * a);
+                } else {
+                    // played: chalk in the colour of the oxide, a different tint for every square
+                    float[] col = spectrum((index * 0.137f) % 0.9f);
+                    frameAround(x, y, h, 0.009f, 1f, 0f, 0.45f + col[0] * 0.45f, 0.45f + col[1] * 0.45f,
+                            0.48f + col[2] * 0.45f, 0.85f * a);
+                }
+                if (ch.byWatcher(index)) {
+                    // the watcher's mark in the corner: it played this one
+                    float mx = x + h * 0.62f, my = y + h * 0.62f;
+                    oval(mx, my, h * 0.2f, h * 0.12f, 0.93f, 0.94f, 0.97f, 0.8f * a);
+                    oval(mx, my, h * 0.07f, h * 0.07f, 0.1f, 0.12f, 0.2f, 0.9f * a);
+                }
+                if (index == ch.current) {
+                    // where the drop is now: a small bead of quicksilver
+                    oval(x - h * 0.62f, y - h * 0.62f, h * 0.09f, h * 0.09f, 0.85f, 0.88f, 0.95f, 0.9f * a);
+                }
+                if (labels < labelN.length) {
+                    labelX[labels] = x;
+                    labelY[labels] = y;
+                    labelN[labels] = index + 1;
+                    labelA[labels] = a * (index == ch.reached ? 1f : 0.85f);
+                    labels++;
+                }
+            }
+        }
         return v;
     }
 
@@ -47,7 +186,7 @@ final class Hud {
         // the map comes up after a turn, a tap or a mirror, and at the start, then fades away
         if (w.state == World.DARK || w.state == World.RISE) return;
         float fade = (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0.4f)
-                * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
+                * (w.pilot != null ? 1f : 1f - World.smooth(2.2f, 2.9f, w.mapAge));
         if (fade <= 0.01f) return;
         // a dark disc under the map, so it reads over a bright island as well as over the black
         for (int k = 0; k < 24; k++) {

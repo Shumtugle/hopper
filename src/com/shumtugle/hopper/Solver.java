@@ -30,6 +30,24 @@ final class Solver {
 
     /** The fewest hops that win, or -1 if there is no way or the search gave up after most positions. */
     static synchronized int hops(Level level, int most) {
+        int[] p = search(level, most, false);
+        return p == null ? -1 : p[0];
+    }
+
+    /**
+     * The fewest hops that win, as moves: cells across and along for each hop in turn, so
+     * {dx0, dz0, dx1, dz1, ...}; null if there is no way within most positions.
+     */
+    static synchronized int[] path(Level level, int most) {
+        int[] p = search(level, most, true);
+        if (p == null) return null;
+        int[] moves = new int[p.length - 1];
+        System.arraycopy(p, 1, moves, 0, moves.length);
+        return moves;
+    }
+
+    /** The search itself: the hop count first, then the moves if asked for. */
+    private static int[] search(Level level, int most, boolean keep) {
         l = level;
         int n = l.type.length;
         int[] shardBit = new int[n], beadBit = new int[n];
@@ -43,17 +61,19 @@ final class Solver {
             if (l.type[i] == Level.GLASS) glassBit[i] = glass++;
             if (l.type[i] == Level.HOT) hotBit[i] = hot++;
         }
-        if (n > (1 << CELL) || shards > SHARDS || beads > BEADS || glass > GLASS || hot > HOT) return -1;
+        if (n > (1 << CELL) || shards > SHARDS || beads > BEADS || glass > GLASS || hot > HOT) return null;
         long allShards = (1L << shards) - 1;
         int plane = l.cols * l.rows;
 
         HashMap<Long, Integer> seen = new HashMap<Long, Integer>();
+        // for each position, the one it came from and the move that brought it
+        HashMap<Long, long[]> from = keep ? new HashMap<Long, long[]>() : null;
         ArrayDeque<Long> queue = new ArrayDeque<Long>();
         long start = l.index(l.startX, l.startZ, l.startF);
         seen.put(start, 0);
         queue.add(start);
         while (!queue.isEmpty()) {
-            if (seen.size() > most) return -1;
+            if (seen.size() > most) return null;
             long s = queue.poll();
             int depth = seen.get(s);
             int p = (int) (s & ((1 << CELL) - 1));
@@ -91,13 +111,32 @@ final class Solver {
                 if (shardBit[t] >= 0) ns |= 1L << (AT_SHARDS + shardBit[t]);
                 ns = held ? ns | 1L << AT_HELD : ns & ~(1L << AT_HELD);
                 ns = (ns & ~((1L << CELL) - 1)) | t;
-                if (there == Level.GATE && ((ns >>> AT_SHARDS) & allShards) == allShards) return depth + 1;
+                if (there == Level.GATE && ((ns >>> AT_SHARDS) & allShards) == allShards) {
+                    if (!keep) return new int[] {depth + 1};
+                    from.put(ns, new long[] {s, dx, dz});
+                    return walkBack(from, ns, start, depth + 1);
+                }
                 if (seen.containsKey(ns)) continue;
                 seen.put(ns, depth + 1);
+                if (keep) from.put(ns, new long[] {s, dx, dz});
                 queue.add(ns);
             }
         }
-        return -1;
+        return null;
+    }
+
+    /** Follows the positions back from the win to the start, writing the moves in order. */
+    private static int[] walkBack(HashMap<Long, long[]> from, long end, long start, int hops) {
+        int[] out = new int[1 + hops * 2];
+        out[0] = hops;
+        long k = end;
+        for (int i = hops - 1; i >= 0 && k != start; i--) {
+            long[] f = from.get(k);
+            out[1 + i * 2] = (int) f[1];
+            out[2 + i * 2] = (int) f[2];
+            k = f[0];
+        }
+        return out;
     }
 
     /** The floor the drop lands on in a column, falling from floor most; -1 for the liquid. */

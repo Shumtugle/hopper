@@ -21,7 +21,9 @@ import javax.microedition.khronos.opengles.GL10;
 
 /**
  * The surface: reads swipes on the UI thread, then on the GL thread advances the world at a
- * fixed rate and draws it from the eye of the drop.
+ * fixed rate and draws it from the eye of the drop. It also keeps the hopscotch of all levels,
+ * and calls the watcher: the solver runs on a thread of its own, and when it has the way, the
+ * level starts again with the watcher playing it.
  */
 final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private static final String TAG = "Hopper";
@@ -30,14 +32,30 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private static final float REACH = 60f;
 
     // commands from the UI thread
-    private static final int FORWARD = 0, LEFT = 1, RIGHT = 2, ROUND = 3, HOLD = 4, UP_LEFT = 5, UP_RIGHT = 6;
+    private static final int FORWARD = 0, LEFT = 1, RIGHT = 2, ROUND = 3, TAP = 4, UP_LEFT = 5, UP_RIGHT = 6,
+            DRAG = 7, BACK = 8;
+    /** The watcher plays a little faster than a finger, so watching it is not a chore. */
+    private static final float WATCHER_PACE = 1.6f;
 
     private final MainActivity act;
     private World world;
     private int level;
 
-    private final int[] pending = new int[32];
+    /** Commands waiting for the GL thread: kind, x, y triples, in screen widths from the middle. */
+    private final float[] pending = new float[3 * 64];
     private int pendingCount;
+
+    private final Chalk chalk = new Chalk();
+    /** A copy of chalk.open for the UI thread, so a finger knows whether it drags the strip. */
+    private volatile boolean chalkOpen;
+    private int reached;
+    private String marks;
+    private float lastMoveY;
+
+    // the watcher's way, worked out on its own thread
+    private volatile int[] way;
+    private volatile int wayFor = -1;
+    private volatile boolean thinking;
 
     // one finger at a time: where it went down, and whether it has already made a swipe
     private float downX, downY;
@@ -48,7 +66,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     private int sky, liquid, scene, hud, text;
     private int triBuf, liquidBuf, islandBuf, movingBuf, farBuf, hudBuf, quadBuf;
-    private int fieldTex, titleTex;
+    private int fieldTex, titleTex, digitTex;
     private int islandVerts, movingVerts, farVerts, islandVersion = -1;
     private float[] islandData, movingData, farData;
     private FloatBuffer meshOut;
@@ -69,10 +87,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private int frames;
     private long frameNanos, statStart;
 
-    Stage(MainActivity act, int level) {
+    Stage(MainActivity act, int level, int reached, String marks) {
         super(act);
         this.act = act;
         this.level = level;
+        this.reached = Math.max(reached, level);
+        this.marks = marks;
         setEGLContextClientVersion(3);
         setEGLConfigChooser(8, 8, 8, 8, 24, 0);
         setPreserveEGLContextOnPause(true);
@@ -87,23 +107,33 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        int w = getWidth();
+        int w = getWidth(), h = getHeight();
         if (w == 0) return true;
+        // finger positions in screen widths from the middle, upwards positive
+        float fx = e.getX() / w - 0.5f, fy = (h * 0.5f - e.getY()) / w;
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 downX = e.getX();
                 downY = e.getY();
+                lastMoveY = e.getY();
                 downAt = e.getEventTime();
                 swiped = false;
                 stretching = false;
                 break;
             case MotionEvent.ACTION_MOVE: {
                 float dx = e.getX() - downX, dy = e.getY() - downY;
+                if (chalkOpen) {
+                    // on the hopscotch a finger only drags the strip up and down
+                    if (dx * dx + dy * dy > (w * 0.03f) * (w * 0.03f)) swiped = true;
+                    if (swiped) queue(DRAG, 0f, (lastMoveY - e.getY()) / w);
+                    lastMoveY = e.getY();
+                    break;
+                }
                 if (swiped) {
                     // a long stroke up is a leap: the same finger, just further
                     if (stretching && -dy > w * 0.3f) {
                         stretching = false;
-                        queue(FORWARD);
+                        queue(FORWARD, 0f, 0f);
                     }
                     break;
                 }
@@ -113,21 +143,21 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                     // eight sectors; only the upper slanted ones mean a slanted hop
                     double deg = Math.toDegrees(Math.atan2(-dy, dx));
                     if (deg > 67.5 && deg <= 112.5) {
-                        queue(FORWARD);
+                        queue(FORWARD, 0f, 0f);
                         stretching = true;
                     }
-                    else if (deg > 22.5 && deg <= 67.5) queue(UP_RIGHT);
-                    else if (deg > 112.5 && deg <= 157.5) queue(UP_LEFT);
-                    else if (deg > -22.5 && deg <= 22.5) queue(RIGHT);
-                    else if (deg > 157.5 || deg <= -157.5) queue(LEFT);
-                    else queue(ROUND);
+                    else if (deg > 22.5 && deg <= 67.5) queue(UP_RIGHT, 0f, 0f);
+                    else if (deg > 112.5 && deg <= 157.5) queue(UP_LEFT, 0f, 0f);
+                    else if (deg > -22.5 && deg <= 22.5) queue(RIGHT, 0f, 0f);
+                    else if (deg > 157.5 || deg <= -157.5) queue(LEFT, 0f, 0f);
+                    else queue(ROUND, 0f, 0f);
                 }
                 break;
             }
             case MotionEvent.ACTION_UP: {
                 float dx = e.getX() - downX, dy = e.getY() - downY;
-                if (!swiped && dx * dx + dy * dy < (w * 0.03f) * (w * 0.03f) && e.getEventTime() - downAt < 350)
-                    queue(HOLD);
+                if (!swiped && dx * dx + dy * dy < (w * 0.03f) * (w * 0.03f) && e.getEventTime() - downAt < 400)
+                    queue(TAP, fx, fy);
                 break;
             }
             default:
@@ -135,9 +165,18 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         return true;
     }
 
-    private void queue(int cmd) {
+    /** The system back: opens the hopscotch, or, from the hopscotch, leaves. */
+    void back() {
+        queue(BACK, 0f, 0f);
+    }
+
+    private void queue(int cmd, float x, float y) {
         synchronized (pending) {
-            if (pendingCount < pending.length) pending[pendingCount++] = cmd;
+            if (pendingCount * 3 + 3 > pending.length) return;
+            pending[pendingCount * 3] = cmd;
+            pending[pendingCount * 3 + 1] = x;
+            pending[pendingCount * 3 + 2] = y;
+            pendingCount++;
         }
     }
 
@@ -164,10 +203,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         quadBuf = ids[6];
         upload2(triBuf, new float[] {-1, -1, 3, -1, -1, 3});
         upload2(quadBuf, new float[] {-1, -1, 1, -1, -1, 1, 1, 1});
-        int[] tex = new int[2];
-        GLES30.glGenTextures(2, tex, 0);
+        int[] tex = new int[3];
+        GLES30.glGenTextures(3, tex, 0);
         fieldTex = tex[0];
         titleTex = tex[1];
+        digitTex = tex[2];
+        makeDigits();
         levelReady = false;
         lastNanos = 0;
     }
@@ -224,23 +265,54 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
         synchronized (pending) {
             for (int i = 0; i < pendingCount; i++) {
-                switch (pending[i]) {
+                int cmd = (int) pending[i * 3];
+                float x = pending[i * 3 + 1], y = pending[i * 3 + 2];
+                if (chalk.open) {
+                    if (cmd == DRAG) chalk.drag(y);
+                    else if (cmd == TAP) pick(x, y);
+                    else if (cmd == BACK) act.quit();
+                    continue;
+                }
+                switch (cmd) {
                     case FORWARD: w.forward(); break;
                     case LEFT: w.turn(-1); break;
                     case RIGHT: w.turn(1); break;
                     case ROUND: w.turn(2); break;
                     case UP_LEFT: w.slanted(-1); break;
                     case UP_RIGHT: w.slanted(1); break;
-                    default: w.hold();
+                    case BACK: openChalk(); break;
+                    case TAP: {
+                        float ex = x - Hud.eyeX(), ey = y - Hud.eyeY(aspect);
+                        if (hudShapes != null && hudShapes.eyeShown && ex * ex + ey * ey < Hud.EYE_R * Hud.EYE_R * 2.2f) summon();
+                        else w.hold();
+                        break;
+                    }
+                    default:
                 }
             }
             pendingCount = 0;
         }
+        w = world;
 
-        // the world and the liquid run at a fixed rate whatever the display does
-        accum += dt;
+        // the watcher has found the way: the level starts again, rising at once, and it plays
+        int[] found = way;
+        if (found != null && wayFor == level) {
+            way = null;
+            wayFor = -1;
+            world = new World(level, false);
+            world.fly(found);
+            prepareLevel();
+            w = world;
+        }
+
+        // the world and the liquid run at a fixed rate whatever the display does; the hopscotch stops them
+        if (chalk.open) {
+            chalk.age += dt;
+        } else {
+            accum += dt * (w.pilot != null ? WATCHER_PACE : 1f);
+        }
         int steps = 0;
-        while (accum >= STEP && steps < 4) {
+        while (accum >= STEP && steps < 4 && !chalk.open) {
             w.update(STEP);
             w.liquid.step();
             accum -= STEP;
@@ -253,12 +325,19 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
         if (w.finished()) {
             boolean won = w.state == World.WIN;
-            if (won) level++;
+            boolean watched = won && w.pilot != null;
+            if (won) {
+                marks = act.onSolved(level, watched);
+                level++;
+                reached = Math.max(reached, level);
+            }
             act.onLevel(level);
             // a new level waits in the dark for its tap; a level tried again rises at once
             world = new World(level, won);
             prepareLevel();
             w = world;
+            // after the watcher's game, the hopscotch: any level played, or the next
+            if (watched) openChalk();
         }
 
         w.camera(eye, look);
@@ -270,8 +349,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drawSky();
         drawLiquid(w);
         drawScene(w);
-        drawHud(w);
-        drawTitle(w);
+        if (chalk.open) {
+            drawChalk();
+        } else {
+            drawHud(w);
+            drawTitle(w);
+        }
 
         frames++;
         frameNanos += System.nanoTime() - now;
@@ -340,7 +423,50 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drawMesh(farBuf, farVerts);
     }
 
+    private void openChalk() {
+        chalk.open(reached, level, marks, aspect);
+        chalkOpen = true;
+    }
+
+    /** A tap on the hopscotch: a square starts its level in the dark; anywhere else goes back. */
+    private void pick(float x, float y) {
+        int index = chalk.hit(x, y);
+        if (index == -1) return;
+        chalk.close();
+        chalkOpen = false;
+        if (index >= 0 && (index != level || world.state != World.DARK)) {
+            level = index;
+            act.onLevel(level);
+            world = new World(level, true);
+            prepareLevel();
+        }
+        lastNanos = 0;
+    }
+
+    /** Asks the watcher to play this level: it works out the way on a thread of its own. */
+    private void summon() {
+        if (thinking || world.pilot != null) return;
+        thinking = true;
+        act.onSummon();
+        final int target = level;
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int[] p = Solver.path(Level.get(target), 600000);
+                if (p != null) {
+                    way = p;
+                    wayFor = target;
+                }
+                thinking = false;
+            }
+        }, "watcher");
+        t.setDaemon(true);
+        t.start();
+    }
+
     private void drawHud(World w) {
+        hudShapes.thinking = thinking;
+        hudShapes.clock = w.time;
         int n = hudShapes.build(w, aspect);
         if (n == 0) return;
         hudOut.position(0);
@@ -362,6 +488,71 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glDisable(GLES30.GL_BLEND);
     }
 
+    /** The hopscotch over the stopped scene, then its numbers. */
+    private void drawChalk() {
+        hudShapes.clock += 1f / 60f;
+        int n = hudShapes.buildChalk(chalk, aspect);
+        if (n > 0) {
+            hudOut.position(0);
+            hudOut.put(hudShapes.data(), 0, n * Hud.FLOATS).position(0);
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, hudBuf);
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, n * Hud.FLOATS * 4, hudOut, GLES30.GL_STREAM_DRAW);
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+            GLES30.glEnable(GLES30.GL_BLEND);
+            GLES30.glBlendFuncSeparate(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE);
+            GLES30.glUseProgram(hud);
+            GLES30.glEnableVertexAttribArray(0);
+            GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, Hud.FLOATS * 4, 0);
+            GLES30.glEnableVertexAttribArray(1);
+            GLES30.glVertexAttribPointer(1, 4, GLES30.GL_FLOAT, false, Hud.FLOATS * 4, 8);
+            GLES30.glDisableVertexAttribArray(2);
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, n);
+            GLES30.glDisableVertexAttribArray(1);
+        }
+        // the numbers, digit by digit from the strip of glyphs
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFuncSeparate(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE);
+        GLES30.glUseProgram(text);
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, digitTex);
+        GLES30.glUniform1i(loc(text, "uText"), 0);
+        flat(quadBuf);
+        float gh = 0.075f, gw = gh * DIGIT_W / (float) DIGIT_H, step = gw * 0.62f;
+        for (int k = 0; k < hudShapes.labels; k++) {
+            String s = String.valueOf(hudShapes.labelN[k]);
+            float x0 = hudShapes.labelX[k] - step * (s.length() - 1) * 0.5f;
+            GLES30.glUniform1f(loc(text, "uAlpha"), hudShapes.labelA[k]);
+            for (int c = 0; c < s.length(); c++) {
+                int d = s.charAt(c) - '0';
+                GLES30.glUniform2f(loc(text, "uSpan"), d * DIGIT_W / (float) DIGITS_W, DIGIT_W / (float) DIGITS_W);
+                GLES30.glUniform4f(loc(text, "uRect"), (x0 + c * step) * 2f, hudShapes.labelY[k] * 2f / aspect,
+                        gw, gh / aspect);
+                GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
+            }
+        }
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
+    private static final int DIGIT_W = 96, DIGIT_H = 128, DIGITS_W = 1024;
+
+    /** The ten digits in a row, in the same face as the level's number. */
+    private void makeDigits() {
+        Bitmap b = Bitmap.createBitmap(DIGITS_W, DIGIT_H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFFFFFFFF);
+        p.setTextAlign(Paint.Align.CENTER);
+        p.setTypeface(Typeface.create(Typeface.SERIF, Typeface.ITALIC));
+        p.setTextSize(104f);
+        Paint.FontMetrics m = p.getFontMetrics();
+        for (int d = 0; d < 10; d++)
+            c.drawText(String.valueOf(d), d * DIGIT_W + DIGIT_W / 2f, DIGIT_H / 2f - (m.ascent + m.descent) / 2f, p);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, digitTex);
+        linear();
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, b, 0);
+        b.recycle();
+    }
+
     /** The level's number and its hint, for the first seconds of every try. */
     private void drawTitle(World w) {
         float a;
@@ -378,6 +569,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, titleTex);
         GLES30.glUniform1i(loc(text, "uText"), 0);
         GLES30.glUniform1f(loc(text, "uAlpha"), a);
+        GLES30.glUniform2f(loc(text, "uSpan"), 0f, 1f);
         // 0.84 of the screen wide, the texture's shape kept, a little above the middle
         float hw = 0.84f, hh = hw * (TITLE_H / (float) TITLE_W) / aspect;
         GLES30.glUniform4f(loc(text, "uRect"), 0f, 0.42f, hw, hh);

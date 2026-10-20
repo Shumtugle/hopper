@@ -16,6 +16,10 @@ package com.shumtugle.hopper;
  * A new level begins in total black, as if the phone were dead. A tap strikes the nothing,
  * a ring goes out over the liquid, and the level rises out of it; only then the drop falls in.
  * A level tried again after a fall rises at once, without waiting for the tap.
+ *
+ * The watcher can play a level instead: it is handed the solver's moves and, at each landing,
+ * orders the next hop exactly as a finger would (a turn, a step, a leap, a slant). A swipe takes
+ * the drop back from it.
  */
 final class World {
     // states
@@ -72,6 +76,9 @@ final class World {
     int queued;
     /** For a one-cell hop: -1 slants it to the left, +1 to the right, 0 keeps it straight. */
     int slant;
+    /** The watcher's moves, dx and dz for each hop in turn, or null while a finger plays. */
+    int[] pilot;
+    private int pilotAt;
     /** Seconds since the map was last called up; it shows for a moment and fades. */
     float mapAge = -1.5f;
     private final int[] move = new int[3];
@@ -134,8 +141,15 @@ final class World {
         return (1f - rise) * (3f + top(f));
     }
 
+    /** Hands the drop to the watcher, which will play these moves from the first landing on. */
+    void fly(int[] moves) {
+        pilot = moves;
+        pilotAt = 0;
+    }
+
     /** A swipe up: one more step for the next hop, at most two. */
     void forward() {
+        pilot = null;
         if (state != PLAY && state != FALL_IN) return;
         if (slant != 0) {
             // a straight swipe after a slanted one straightens the hop
@@ -150,6 +164,7 @@ final class World {
 
     /** A swipe up and to one side: one cell ahead and one across, -1 left or +1 right. No leap slants. */
     void slanted(int side) {
+        pilot = null;
         if (state != PLAY && state != FALL_IN) return;
         queued = 1;
         slant = side;
@@ -158,6 +173,7 @@ final class World {
 
     /** A sideways swipe: turn by a quarter, -1 left or +1 right; 2 turns round. */
     void turn(int quarters) {
+        pilot = null;
         if (state != PLAY && state != FALL_IN) return;
         facing = (facing + quarters + 4) % 4;
         mapAge = 0f;
@@ -174,6 +190,7 @@ final class World {
             return;
         }
         mapAge = 0f;
+        if (pilot != null) return;
         queued = 0;
         slant = 0;
     }
@@ -377,6 +394,7 @@ final class World {
 
     private void takeOff() {
         int t = typeAt(cellX, cellZ, cellF);
+        if (pilot != null) order(t);
         plan(move);
         // a spring's throw leaves the order standing for the landing after it
         if (t != Level.SPRING) {
@@ -407,6 +425,41 @@ final class World {
             sink[level.index(cellX, cellZ, cellF)] = 0.001f;
             version++;
             emit(EV_SINK);
+        }
+    }
+
+    /** The watcher's order for the hop about to start: the same turn and swipes a finger would give. */
+    private void order(int t) {
+        if (pilotAt * 2 + 1 >= pilot.length) return;
+        int dx = pilot[pilotAt * 2], dz = pilot[pilotAt * 2 + 1];
+        pilotAt++;
+        // a spring throws by itself; its move is in the list only to keep count
+        if (t == Level.SPRING) return;
+        if (Math.abs(dx) == 2 || Math.abs(dz) == 2 || dx == 0 || dz == 0) {
+            int k = Math.max(Math.abs(dx), Math.abs(dz));
+            for (int f = 0; f < 4; f++)
+                if (DX[f] * k == dx && DZ[f] * k == dz) facing = f;
+            queued = k;
+            slant = 0;
+            return;
+        }
+        // a corner: of the two ways to slant into it, the one that turns the head less
+        int best = -1, bestSide = 0, bestTurn = 9;
+        for (int f = 0; f < 4; f++)
+            for (int side = -1; side <= 1; side += 2) {
+                int r = (f + 1) % 4;
+                if (DX[f] + DX[r] * side != dx || DZ[f] + DZ[r] * side != dz) continue;
+                int turn = Math.min((f - facing + 4) % 4, (facing - f + 4) % 4);
+                if (turn < bestTurn) {
+                    bestTurn = turn;
+                    best = f;
+                    bestSide = side;
+                }
+            }
+        if (best >= 0) {
+            facing = best;
+            queued = 1;
+            slant = bestSide;
         }
     }
 

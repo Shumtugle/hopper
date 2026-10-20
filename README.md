@@ -32,6 +32,20 @@ shortest way fits the difficulty. Difficulty rises one step every three levels,
 each step bringing one new thing, until it reaches a ceiling; every twentieth
 level is a step easier, every thirtieth two. There is always a next level.
 
+## The watcher and the hopscotch
+
+Beside the map sits the watcher: an eye in a stepped frame of bismuth. Tap it
+and it works out the way, the level rises again, and the watcher plays it,
+turning and hopping exactly as a finger would. Swipe, and the drop is yours
+again.
+
+After the watcher's game comes the hopscotch: every level as a chalked square,
+the numbers climbing up the screen in pairs and singles. Any level played can
+be played again, or the next one taken. Squares the watcher played carry its
+mark. The system back button opens the hopscotch at any time; pressed there, it
+leaves the game. Each level grows from its own number, so a level chosen again
+is the very same level.
+
 ## Controls
 
 - **Swipe up** — the next bounce goes one cell ahead.
@@ -40,6 +54,8 @@ level is a step easier, every thirtieth two. There is always a next level.
 - **Swipe sideways** — turn by a quarter, at once.
 - **Swipe down** — turn round.
 - **Tap** — forget the order and look at the map.
+- **Tap the eye** beside the map — the watcher plays the level.
+- **Back** — the hopscotch of all levels.
 
 The map in the corner turns with you: up is always ahead. It shows the floor you
 are on in full, the floors below small and dim, the floors above as outlines,

@@ -52,7 +52,9 @@ public final class MainActivity extends Activity {
 
     private void startGame() {
         int level = Math.max(0, prefs.getInt("level", 0));
-        stage = new Stage(this, level);
+        // every level is grown from its number, so the number is all that needs keeping
+        int reached = Math.max(level, prefs.getInt("reached", level));
+        stage = new Stage(this, level, reached, prefs.getString("marks", ""));
         setContentView(stage);
         // a low string under everything, the same one that hums under the crystal
         sound.setCrystal(true, 2f, 0f, 0.4f, 0f);
@@ -98,6 +100,45 @@ public final class MainActivity extends Activity {
     /** The level now being played; written down so the game comes back to it. */
     void onLevel(int level) {
         prefs.edit().putInt("level", level).apply();
+    }
+
+    /**
+     * A level won: the next one is open from now on. Who won it is written down, one character
+     * a level, '1' for a finger and '2' for the watcher; a finger's win is never overwritten.
+     * Returns the marks as they now stand.
+     */
+    String onSolved(int level, boolean watcher) {
+        StringBuilder m = new StringBuilder(prefs.getString("marks", ""));
+        while (m.length() <= level) m.append('0');
+        if (!watcher || m.charAt(level) != '1') m.setCharAt(level, watcher ? '2' : '1');
+        int reached = Math.max(prefs.getInt("reached", 0), level + 1);
+        prefs.edit().putString("marks", m.toString()).putInt("reached", reached).apply();
+        return m.toString();
+    }
+
+    /** The watcher has been called: a bell, high and soft. */
+    void onSummon() {
+        sound.strike(587.33f, 0.3f, 1.4f);
+        sound.strikeLater(880f, 0.2f, 1.2f, 0.18f);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (stage == null) {
+            super.onBackPressed();
+            return;
+        }
+        stage.back();
+    }
+
+    /** Leaves the game; safe to call from the render thread. */
+    void quit() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                finish();
+            }
+        });
     }
 
     /** Called on the render thread for every event the world raised this frame. */
