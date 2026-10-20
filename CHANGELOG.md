@@ -1,5 +1,13 @@
 # Changes
 
+## 1.3.1
+
+- Mirages read as mirrors. Over each stands an upright sheet of quicksilver,
+  always turned to the drop, and in it the drop itself bounces, wavering as if
+  seen through hot air. The ball that used to bounce on a mirage is gone.
+- Near a mirage, the island ahead answers every landing with a soft note. A
+  mirage keeps silent, as the liquid does.
+
 ## 1.3
 
 - Order levels: rare, from the twenty-eighth on. Their shards must be taken in

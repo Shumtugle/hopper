@@ -67,11 +67,11 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     /** The stroke started as a straight swipe up and may still stretch into a leap. */
     private boolean stretching;
 
-    private int sky, liquid, scene, hud, text;
-    private int triBuf, liquidBuf, islandBuf, movingBuf, farBuf, hudBuf, quadBuf;
+    private int sky, liquid, scene, mirage, hud, text;
+    private int triBuf, liquidBuf, islandBuf, movingBuf, farBuf, hudBuf, quadBuf, mirageBuf;
     private int fieldTex, titleTex, digitTex;
-    private int islandVerts, movingVerts, farVerts, islandVersion = -1;
-    private float[] islandData, movingData, farData;
+    private int islandVerts, movingVerts, farVerts, mirageVerts, islandVersion = -1;
+    private float[] islandData, movingData, farData, mirageData;
     private FloatBuffer meshOut;
     private ByteBuffer fieldOut;
     private Hud hudShapes;
@@ -193,10 +193,11 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         sky = program("sky.vert", "sky.frag");
         liquid = program("liquid.vert", "liquid.frag");
         scene = program("scene.vert", "scene.frag");
+        mirage = program("scene.vert", "mirage.frag");
         hud = program("hud.vert", "hud.frag");
         text = program("text.vert", "text.frag");
-        int[] ids = new int[7];
-        GLES30.glGenBuffers(7, ids, 0);
+        int[] ids = new int[8];
+        GLES30.glGenBuffers(8, ids, 0);
         triBuf = ids[0];
         liquidBuf = ids[1];
         islandBuf = ids[2];
@@ -204,6 +205,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         farBuf = ids[4];
         hudBuf = ids[5];
         quadBuf = ids[6];
+        mirageBuf = ids[7];
         upload2(triBuf, new float[] {-1, -1, 3, -1, -1, 3});
         upload2(quadBuf, new float[] {-1, -1, 1, -1, -1, 1, 1, 1});
         int[] tex = new int[3];
@@ -237,7 +239,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         islandData = new float[Mesh.islandCapacity(w) * Mesh.FLOATS];
         movingData = new float[Mesh.dynamicCapacity(w) * Mesh.FLOATS];
         farData = new float[Mesh.distanceCapacity() * Mesh.FLOATS];
-        int most = Math.max(islandData.length, Math.max(movingData.length, farData.length));
+        mirageData = new float[Mesh.mirageCapacity(w) * Mesh.FLOATS];
+        int most = Math.max(Math.max(islandData.length, mirageData.length), Math.max(movingData.length, farData.length));
         if (meshOut == null || meshOut.capacity() < most)
             meshOut = ByteBuffer.allocateDirect(most * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
         // the black surface reaches far past the level on every side
@@ -455,6 +458,29 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drawMesh(islandBuf, islandVerts);
         drawMesh(movingBuf, movingVerts);
         drawMesh(farBuf, farVerts);
+
+        // the mirages' mirrors last, see-through, over everything they stand in front of
+        int need = Mesh.mirageCapacity(w) * Mesh.FLOATS;
+        if (mirageData.length < need) {
+            // an act that rose larger than the first
+            mirageData = new float[need];
+            if (meshOut.capacity() < need)
+                meshOut = ByteBuffer.allocateDirect(need * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        }
+        mirageVerts = Mesh.mirages(w, mirageData);
+        if (mirageVerts == 0) return;
+        upload(mirageBuf, mirageData, mirageVerts, GLES30.GL_STREAM_DRAW);
+        GLES30.glUseProgram(mirage);
+        GLES30.glUniformMatrix4fv(loc(mirage, "uMvp"), 1, false, mvp, 0);
+        GLES30.glUniform3f(loc(mirage, "uEye"), eye[0], eye[1], eye[2]);
+        GLES30.glUniform4f(loc(mirage, "uDrop"), w.x, w.y + Mesh.DROP, w.z, Mesh.DROP);
+        GLES30.glUniform1f(loc(mirage, "uTime"), w.time);
+        GLES30.glDepthMask(false);
+        GLES30.glEnable(GLES30.GL_BLEND);
+        GLES30.glBlendFuncSeparate(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE);
+        drawMesh(mirageBuf, mirageVerts);
+        GLES30.glDisable(GLES30.GL_BLEND);
+        GLES30.glDepthMask(true);
     }
 
     private void openChalk() {

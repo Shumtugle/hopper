@@ -51,7 +51,7 @@ final class Mesh {
                         v = box(out, v, x, (h + bottom) * 0.5f, z, 0.37f, (h - bottom) * 0.5f, 0.37f, 160f + jitter, GLASS);
                         v = rim(out, v, x, h, z, 0.37f, 0.03f, 0.04f, 210f + jitter, GLASS);
                     } else {
-                        // a mirage is dressed exactly like a plain island; only its reflection gives it away
+                        // a mirage is dressed exactly like a plain island; the mirror standing on it gives it away
                         float film = (t == Level.SPRING ? 520f : t == Level.GATE ? 330f : 250f) + jitter + f * 60f;
                         float shade = t == Level.HOT ? HOT : 1f;
                         // an island taken out of turn turns into a funnel: its steps open upwards and go dark
@@ -108,10 +108,9 @@ final class Mesh {
         int v = 0;
         float time = w.time;
         int seen = 0;
-        float lift = w.lift();
         if (w.lift > 0.05f) {
             // seen from above through a shift, the drop itself is there to be found
-            v = sphere(out, v, w.x, w.y + 0.14f, w.z, 0.14f);
+            v = sphere(out, v, w.x, w.y + DROP, w.z, DROP);
         }
         for (int f = 0; f < w.floors; f++)
             for (int z = 0; z < w.rows; z++)
@@ -119,11 +118,7 @@ final class Mesh {
                     int i = w.level.index(x, z, f);
                     if (w.sink[i] > 0f) continue;
                     float base = World.top(f) - w.under(f, i);
-                    if (w.type[i] == Level.MIRAGE) {
-                        // a mirage is a mirror: the drop sees itself bouncing on it, in step with its own bounce
-                        v = sphere(out, v, x, base + 0.1f + lift, z, 0.1f);
-                        continue;
-                    }
+                    if (w.type[i] == Level.MIRAGE) continue;
                     if (w.level.shard[i]) {
                         if (w.shard[i]) {
                             float hue = w.shardsTotal > 1 ? 0.9f * seen / (w.shardsTotal - 1) : 0.3f;
@@ -182,6 +177,42 @@ final class Mesh {
                 }
         return v;
     }
+
+    /**
+     * The mirror on every mirage: an upright sheet of quicksilver, always turned to the drop.
+     * Its corners carry where they lie across the sheet (-1 to 1) and up it (0 to 1); the
+     * mirage shader finds the drop in it and makes it waver.
+     */
+    static int mirages(World w, float[] out) {
+        int v = 0;
+        for (int f = 0; f < w.floors; f++)
+            for (int z = 0; z < w.rows; z++)
+                for (int x = 0; x < w.cols; x++) {
+                    int i = w.level.index(x, z, f);
+                    if (w.type[i] != Level.MIRAGE || w.sink[i] > 0f) continue;
+                    float dx = w.x - x, dz = w.z - z, l = (float) Math.sqrt(dx * dx + dz * dz);
+                    if (l < 0.05f) { dx = 0f; dz = 1f; l = 1f; }
+                    float nx = dx / l, nz = dz / l, sx = -nz * SHEET_WIDE, sz = nx * SHEET_WIDE;
+                    float bottom = World.top(f) - w.under(f, i) + 0.04f, top = bottom + SHEET_HIGH;
+                    v = vert(out, v, x - sx, bottom, z - sz, nx, 0f, nz, -1f, 0f);
+                    v = vert(out, v, x + sx, bottom, z + sz, nx, 0f, nz, 1f, 0f);
+                    v = vert(out, v, x + sx, top, z + sz, nx, 0f, nz, 1f, 1f);
+                    v = vert(out, v, x - sx, bottom, z - sz, nx, 0f, nz, -1f, 0f);
+                    v = vert(out, v, x + sx, top, z + sz, nx, 0f, nz, 1f, 1f);
+                    v = vert(out, v, x - sx, top, z - sz, nx, 0f, nz, -1f, 1f);
+                }
+        return v;
+    }
+
+    static int mirageCapacity(World w) {
+        return w.type.length * 6;
+    }
+
+    /** Half the width of a mirage's mirror, and its height. */
+    private static final float SHEET_WIDE = 0.27f, SHEET_HIGH = 0.95f;
+
+    /** The drop's radius; the mirage shader looks for a ball this size where the drop is. */
+    static final float DROP = 0.14f;
 
     /** Huge hoppers far out in the liquid, so the eye has a horizon to hold on to. */
     static int distance(World w, float[] out) {

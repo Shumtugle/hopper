@@ -231,6 +231,10 @@ public final class MainActivity extends Activity {
                 sound.strike(293.66f, 0.3f, 1.6f);
                 sound.strikeLater(440f, 0.25f, 1.4f, 0.15f);
                 break;
+            case World.EV_ECHO:
+                // the island ahead answers, softly, a moment after the landing
+                sound.strikeLater(783.99f, 0.12f, 0.4f, 0.12f);
+                break;
             case World.EV_FUNNEL:
                 // the wrong note: the island opens under the drop and it goes down, far down
                 sound.thud(330f, 38f, 0.7f, 1.6f);

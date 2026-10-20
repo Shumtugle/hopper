@@ -22,8 +22,10 @@ over the liquid, and the level rises out of it.
   thrown: the floor is a ceiling.
 - **Hot plates** burn, and so does their heat if you leap over them, unless you
   carry a silver **bead**: it cools one plate.
-- **Mirages** look like islands and hold nothing. The map does not show them,
-  and on every mirage a reflection of the drop bounces in step with you.
+- **Mirages** look like islands and hold nothing. The map does not show them.
+  Over each stands a shimmering mirror, always turned to the drop, and in it the
+  drop bounces as seen through hot air. Near a mirage, the island ahead answers
+  every landing with a soft note; a mirage keeps silent.
 
 Some levels **shift**. They come in acts: after a number of landings the ground
 trembles for three bounces, then everything but the island under you goes down

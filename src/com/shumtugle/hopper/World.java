@@ -26,6 +26,9 @@ package com.shumtugle.hopper;
  * own beat, the lowest slowest. A shard taken out of turn turns its island into a funnel; the
  * drop goes down it, and the stage pours it into a level already played.
  *
+ * Over a mirage stands a mirror, always turned to the drop, that shows it through a shimmer.
+ * Near one, the island ahead answers each landing with a soft note; a mirage does not.
+ *
  * The watcher can play a level instead: it is handed the solver's moves and, at each landing,
  * orders the next hop exactly as a finger would (a turn, a step, a leap, a slant). A swipe takes
  * the drop back from it.
@@ -38,7 +41,7 @@ final class World {
     static final int EV_LAND = 1, EV_LAND_GLASS = 2, EV_LAND_SPRING = 3, EV_SHARD = 4, EV_BEAD = 5,
             EV_COOL = 6, EV_OPEN = 7, EV_WIN = 8, EV_DROWN = 9, EV_BURN = 10, EV_SINK = 11, EV_TURN = 12,
             EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16, EV_TREMOR = 17, EV_SHIFT = 18,
-            EV_RISEN = 19, EV_FUNNEL = 20;
+            EV_RISEN = 19, EV_FUNNEL = 20, EV_ECHO = 21;
     /** A shard humming: EV_HUM + rank * 16 + loudness, 1 to 15. */
     static final int EV_HUM = 1000;
 
@@ -498,6 +501,7 @@ final class World {
             mapAge = 0f;
         }
         emit(t == Level.GLASS ? EV_LAND_GLASS : t == Level.SPRING ? EV_LAND_SPRING : EV_LAND);
+        echo();
         state = PLAY;
         countLanding();
         takeOff();
@@ -595,6 +599,24 @@ final class World {
         } else {
             job.run();
         }
+    }
+
+    /**
+     * Near a mirage, the island ahead answers every landing. A mirage keeps silent, as the
+     * liquid does: it holds nothing, and now it sounds so.
+     */
+    private void echo() {
+        int ax = cellX + DX[facing], az = cellZ + DZ[facing];
+        if (typeAt(ax, az, cellF) == Level.LIQUID) return;
+        for (int f = Math.max(0, cellF - 1); f <= Math.min(floors - 1, cellF + 1); f++)
+            for (int cz = Math.max(0, cellZ - 2); cz <= Math.min(rows - 1, cellZ + 2); cz++)
+                for (int cx = Math.max(0, cellX - 2); cx <= Math.min(cols - 1, cellX + 2); cx++) {
+                    int i = level.index(cx, cz, f);
+                    if (type[i] == Level.MIRAGE && sink[i] <= 0f) {
+                        emit(EV_ECHO);
+                        return;
+                    }
+                }
     }
 
     /** How long between hums of the shard of this rank: the lowest note slowest. */
