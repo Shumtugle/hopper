@@ -17,6 +17,11 @@ import java.util.Random;
  * fixed order until it meets a ceiling, and stays there. After that clamp, not before it, every
  * twentieth level is one step easier and every thirtieth two: a breath, not a setback. Within a
  * step the length of the way still wavers a little either side.
+ *
+ * Some levels shift: from the sixteenth on, about one in four comes in acts. Each act is grown
+ * from the cell the drop stands on when the ground shifts, with the same seed every time for the
+ * same level, act and cell, so it is checked by the solver like any level. Only the last act has
+ * the gate; shards not taken in time move on to the next act.
  */
 final class Maze {
     private Maze() {}
@@ -47,6 +52,41 @@ final class Maze {
         return n >= Level.drawn() && (shown % 30 == 0 || shown % 20 == 0);
     }
 
+    /** True if level n comes in acts that replace one another as the drop goes. */
+    static boolean staged(int n) {
+        if (n < 15 || n < Level.drawn() || breather(n)) return false;
+        return (int) ((seed(n) >>> 33) % 4) == 0;
+    }
+
+    static int acts(int n) {
+        return staged(n) ? (step(n) >= SHARDS ? 3 : 2) : 1;
+    }
+
+    /** Shards for a level of this step, all acts together. */
+    static int shardsFor(int step) {
+        return Math.min(5, 2 + (step >= SHARDS ? 1 + (step - SHARDS) / 2 : step / 3));
+    }
+
+    /** The shards each act of level n brings, earlier acts taking the remainder. */
+    static int[] actShards(int n) {
+        int acts = acts(n), total = Math.max(acts, shardsFor(step(n)));
+        int[] out = new int[acts];
+        for (int k = 0; k < acts; k++) out[k] = total / acts + (k < total % acts ? 1 : 0);
+        return out;
+    }
+
+    /** The fewest hops one act should take. */
+    static int actTarget(int n) {
+        return Math.max(5, target(step(n)) / acts(n) + 2);
+    }
+
+    /** What to grow: a board of given size from a given cell, or, with cols 0, a board of its own. */
+    static final class Shape {
+        int cols, rows, floors, x, z, f;
+        int shards;
+        boolean gate = true;
+    }
+
     /** The fewest hops a level of this step should take. */
     static int target(int step) {
         return 8 + Math.round(step * 1.3f);
@@ -60,13 +100,66 @@ final class Maze {
     static Level make(int n) {
         Random r = new Random(seed(n));
         int step = step(n);
+        Shape shape = new Shape();
         // the way wavers a little round its step, now shorter, now longer
-        int want = target(step) + r.nextInt(5) - 2;
-        String hint = breather(n) ? "a breather" : "";
+        int want;
+        String hint;
+        if (staged(n)) {
+            want = actTarget(n) + r.nextInt(3) - 1;
+            shape.shards = actShards(n)[0];
+            shape.gate = false;
+            hint = "the ground shifts as you go";
+        } else {
+            want = target(step) + r.nextInt(5) - 2;
+            shape.shards = shardsFor(step);
+            hint = breather(n) ? "a breather" : "";
+        }
+        Level best = pick(r, step, want, hint, shape, 40);
+        // never needed in practice; a plain line keeps the game going if it ever is
+        return best != null ? best : new Level("", "E", "#", "*", "#", "S");
+    }
+
+    /**
+     * Act k (from 1) of level n, grown from the cell the drop stands on, on a board the size of
+     * the level's. carried is how many shards the drop left behind in the act before.
+     */
+    static Level act(int n, int k, int x, int z, int f, int carried, int cols, int rows, int floors) {
+        long mix = seed(n) ^ (k * 0x632BE59BD9B4E019L) ^ (((long) x * 131 + z) * 17 + f) * 0x9E3779B97F4A7C15L;
+        Random r = new Random(mix);
+        Shape shape = new Shape();
+        shape.cols = cols;
+        shape.rows = rows;
+        shape.floors = floors;
+        shape.x = x;
+        shape.z = z;
+        shape.f = f;
+        shape.shards = actShards(n)[k] + carried;
+        shape.gate = k == acts(n) - 1;
+        Level best = pick(r, step(n), actTarget(n) + r.nextInt(3) - 1, "", shape, 120);
+        if (best != null) return best;
+        // a last resort that is always there: the gate, or a shard, right beside the drop
+        String[][] map = new String[floors][rows];
+        for (int ff = 0; ff < floors; ff++)
+            for (int zz = 0; zz < rows; zz++) {
+                StringBuilder s = new StringBuilder();
+                for (int xx = 0; xx < cols; xx++) s.append(xx == x && zz == z && ff == f ? 'S' : '.');
+                map[ff][zz] = s.toString();
+            }
+        int nx = x > 0 ? x - 1 : x + 1;
+        char[] row = map[f][z].toCharArray();
+        row[nx] = shape.gate && shape.shards == 0 ? 'E' : '*';
+        map[f][z] = new String(row);
+        Level l = new Level("", map);
+        l.hops = 1;
+        return l;
+    }
+
+    /** Grows up to tries candidates and keeps the one whose shortest win is nearest want. */
+    private static Level pick(Random r, int step, int want, String hint, Shape shape, int tries) {
         Level best = null;
         int bestGap = Integer.MAX_VALUE;
-        for (int attempt = 0; attempt < 40 && bestGap > 1; attempt++) {
-            Level l = grow(r, step, want, hint);
+        for (int attempt = 0; attempt < tries && bestGap > 1; attempt++) {
+            Level l = grow(r, step, want, hint, shape);
             if (l == null) continue;
             int hops = Solver.hops(l, 40000);
             if (hops < 0) continue;
@@ -74,10 +167,10 @@ final class Maze {
             if (gap < bestGap) {
                 bestGap = gap;
                 best = l;
+                l.hops = hops;
             }
         }
-        // never needed in practice; a plain line keeps the game going if it ever is
-        return best != null ? best : new Level("", "E", "#", "*", "#", "S");
+        return best;
     }
 
     private static long seed(int n) {
@@ -108,10 +201,17 @@ final class Maze {
         return f >= floors || !inside(x, z) || cell[at(x, z, f)] == '.';
     }
 
-    private static synchronized Level grow(Random r, int step, int target, String hint) {
-        floors = step >= THIRD_FLOOR ? 3 : 2;
-        cols = 5 + r.nextInt(2) + (step >= WIDE ? 2 : step >= PLATES ? 1 : 0);
-        rows = cols + r.nextInt(3) - 1;
+    private static synchronized Level grow(Random r, int step, int target, String hint, Shape shape) {
+        boolean given = shape.cols > 0;
+        if (given) {
+            floors = shape.floors;
+            cols = shape.cols;
+            rows = shape.rows;
+        } else {
+            floors = step >= THIRD_FLOOR ? 3 : 2;
+            cols = 5 + r.nextInt(2) + (step >= WIDE ? 2 : step >= PLATES ? 1 : 0);
+            rows = cols + r.nextInt(3) - 1;
+        }
         int want = target + 2 + r.nextInt(4);
         int n = cols * rows * floors;
         cell = new char[n];
@@ -120,7 +220,7 @@ final class Maze {
         java.util.Arrays.fill(cell, '.');
 
         ArrayList<Integer> path = new ArrayList<Integer>();
-        int x = 1 + r.nextInt(cols - 2), z = rows - 1, f = 0;
+        int x = given ? shape.x : 1 + r.nextInt(cols - 2), z = given ? shape.z : rows - 1, f = given ? shape.f : 0;
         cell[at(x, z, f)] = '#';
         path.add(at(x, z, f));
         int climbs = 0;
@@ -151,10 +251,11 @@ final class Maze {
             cell[at(x, z, f)] = '#';
             path.add(at(x, z, f));
         }
-        if (path.size() < Math.max(6, want * 2 / 3)) return null;
+        if (path.size() < Math.max(given ? 4 : 6, want * 2 / 3)) return null;
         int last = path.size() - 1;
         cell[path.get(0)] = 'S';
-        cell[path.get(last)] = 'E';
+        // an act without the gate ends on a shard, so its way leads somewhere
+        cell[path.get(last)] = shape.gate ? 'E' : '*';
 
         // a bead and the hot plate it is for, the bead always first along the way
         if (step >= PLATES && last >= 6 && r.nextFloat() < 0.8f) {
@@ -175,9 +276,9 @@ final class Maze {
             if (cell[c] == '#' && r.nextFloat() < glassChance) cell[c] = 'o';
         }
         // shards along the way, spread out: never two in a row
-        int shards = Math.min(5, 2 + (step >= SHARDS ? 1 + (step - SHARDS) / 2 : step / 3));
-        int placed = 0;
-        for (int tries = 0; placed < shards && tries < 60; tries++) {
+        int shards = shape.shards;
+        int placed = shape.gate ? 0 : 1;
+        for (int tries = 0; placed < shards && tries < 80; tries++) {
             int k = 1 + r.nextInt(last - 1);
             int c = path.get(k);
             if (cell[c] != '#' && cell[c] != 'o') continue;
@@ -185,7 +286,7 @@ final class Maze {
             cell[c] = '*';
             placed++;
         }
-        if (placed < 2) return null;
+        if (placed < shards) return null;
 
         // islands that lead nowhere: walkways on the floors above, dead ends, a few ceilings
         float decoy = Math.min(0.24f, 0.1f + step * 0.015f);

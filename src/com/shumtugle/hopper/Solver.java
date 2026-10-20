@@ -63,6 +63,9 @@ final class Solver {
         }
         if (n > (1 << CELL) || shards > SHARDS || beads > BEADS || glass > GLASS || hot > HOT) return null;
         long allShards = (1L << shards) - 1;
+        // an act of a shifting level has no gate: there the win is all its shards
+        boolean gate = false;
+        for (int i = 0; i < n; i++) if (l.type[i] == Level.GATE) gate = true;
         int plane = l.cols * l.rows;
 
         HashMap<Long, Integer> seen = new HashMap<Long, Integer>();
@@ -111,7 +114,8 @@ final class Solver {
                 if (shardBit[t] >= 0) ns |= 1L << (AT_SHARDS + shardBit[t]);
                 ns = held ? ns | 1L << AT_HELD : ns & ~(1L << AT_HELD);
                 ns = (ns & ~((1L << CELL) - 1)) | t;
-                if (there == Level.GATE && ((ns >>> AT_SHARDS) & allShards) == allShards) {
+                boolean all = ((ns >>> AT_SHARDS) & allShards) == allShards;
+                if (all && (there == Level.GATE || !gate)) {
                     if (!keep) return new int[] {depth + 1};
                     from.put(ns, new long[] {s, dx, dz});
                     return walkBack(from, ns, start, depth + 1);

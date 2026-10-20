@@ -210,6 +210,21 @@ public final class MainActivity extends Activity {
                 sound.strikeLater(293.66f, 0.3f, 1.6f, 0.9f);
                 thump(true);
                 break;
+            case World.EV_TREMOR:
+                // the ground trembles: a low knock, a shiver in the hand
+                sound.thud(70f, 48f, 0.35f, 0.3f);
+                tick();
+                break;
+            case World.EV_SHIFT:
+                // everything but this island goes under
+                sound.thud(90f, 36f, 0.85f, 0.7f);
+                sound.strike(73.42f, 0.55f, 2.4f);
+                thump(true);
+                break;
+            case World.EV_RISEN:
+                sound.strike(293.66f, 0.3f, 1.6f);
+                sound.strikeLater(440f, 0.25f, 1.4f, 0.15f);
+                break;
             case World.EV_BONK:
                 // the drop meets a wall too high to climb
                 sound.knock(180f, 0.4f, 0.04f);

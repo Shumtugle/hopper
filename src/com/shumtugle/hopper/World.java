@@ -17,6 +17,11 @@ package com.shumtugle.hopper;
  * a ring goes out over the liquid, and the level rises out of it; only then the drop falls in.
  * A level tried again after a fall rises at once, without waiting for the tap.
  *
+ * A shifting level comes in acts. Each act lasts a number of landings; three before its end the
+ * ground trembles, and then everything but the island under the drop goes down into the liquid
+ * and the next act rises in its place, grown from that island. The drop bounces on the spot the
+ * while. Shards left behind move on to the next act; only the last one has the gate.
+ *
  * The watcher can play a level instead: it is handed the solver's moves and, at each landing,
  * orders the next hop exactly as a finger would (a turn, a step, a leap, a slant). A swipe takes
  * the drop back from it.
@@ -28,7 +33,8 @@ final class World {
     // events for sound and touch feedback
     static final int EV_LAND = 1, EV_LAND_GLASS = 2, EV_LAND_SPRING = 3, EV_SHARD = 4, EV_BEAD = 5,
             EV_COOL = 6, EV_OPEN = 7, EV_WIN = 8, EV_DROWN = 9, EV_BURN = 10, EV_SINK = 11, EV_TURN = 12,
-            EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16;
+            EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16, EV_TREMOR = 17, EV_SHIFT = 18,
+            EV_RISEN = 19;
 
     // kinds of hop
     static final int STILL = 0, HOP = 1, LEAP = 2, THROW = 3;
@@ -46,14 +52,30 @@ final class World {
     private static final int[] DX = {0, 1, 0, -1}, DZ = {-1, 0, 1, 0};
 
     final int index;
-    final Level level;
+    /** The board in play: the level, or in a shifting level the act now standing. */
+    Level level;
     final int cols, rows, floors;
-    final int[] type;
-    final boolean[] shard, bead;
+    int[] type;
+    boolean[] shard, bead;
     /** How far each island has gone under, 0 to 1; a sunk island holds nothing. */
-    final float[] sink;
+    float[] sink;
     /** Short squash of an island just landed on, 1 down to 0. */
-    final float[] dent;
+    float[] dent;
+
+    // a shifting level: which act stands, its landings so far and how many it allows
+    int act, acts = 1;
+    private int actHops, budget = Integer.MAX_VALUE, tremorFrom = -1, actLeft;
+    /** How hard the ground trembles before a shift, 0 to 1. */
+    float tremor;
+    /** 0 while the ground holds; 1 while the old act goes down; 2 while the new one comes up. */
+    int shift;
+    private float shiftAge;
+    /** The island the drop stands on through a shift; it alone stays up. */
+    int keep = -1;
+    /** Set by the stage: grow the next act on a thread of its own instead of in the frame. */
+    boolean async;
+    private volatile Level nextAct;
+    private volatile int[] nextWay;
     /** Bumped whenever islands change for good, so the renderer rebuilds its still geometry. */
     int version;
 
@@ -116,6 +138,14 @@ final class World {
         sink = new float[type.length];
         dent = new float[type.length];
         shardsLeft = shardsTotal = level.shards();
+        actLeft = shardsLeft;
+        if (index >= Level.drawn() && Maze.staged(index)) {
+            acts = Maze.acts(index);
+            shardsTotal = 0;
+            for (int k : Maze.actShards(index)) shardsTotal += k;
+            shardsLeft = shardsTotal;
+            budget = Math.max(4, level.hops) + 4;
+        }
         open = shardsTotal == 0;
         cellX = toX = level.startX;
         cellZ = toZ = level.startZ;
@@ -136,9 +166,15 @@ final class World {
 
     // ---- input, from the render thread ----
 
-    /** How far below its place an island on floor f still is, while the level rises. */
-    float under(int f) {
+    /** How far below its place island i, on floor f, still is while the level rises or shifts. */
+    float under(int f, int i) {
+        if (i == keep) return 0f;
         return (1f - rise) * (3f + top(f));
+    }
+
+    /** How far below its place something on floor f is, standing on no island in particular. */
+    float under(int f) {
+        return under(f, -2);
     }
 
     /** Hands the drop to the watcher, which will play these moves from the first landing on. */
@@ -206,6 +242,38 @@ final class World {
         }
         awake += dt;
         mapAge += dt;
+        if (shift == 1) {
+            // the old act goes down; once the next one is grown, it comes up
+            shiftAge += dt;
+            rise = 1f - smooth(0f, 0.9f, shiftAge);
+            version++;
+            if (shiftAge >= 0.9f && nextAct != null) swapAct();
+        } else if (shift == 2) {
+            shiftAge += dt;
+            rise = smooth(0.1f, 1.6f, shiftAge);
+            version++;
+            if (shiftAge >= 1.6f) {
+                rise = 1f;
+                shift = 0;
+                keep = -1;
+                mapAge = 0f;
+                emit(EV_RISEN);
+            }
+        }
+        if (tremorFrom >= 0 && shift == 0) {
+            float t = (actHops - tremorFrom + (state == PLAY ? hopPhase() : 0f)) / 3f;
+            tremor = Math.min(1f, Math.max(0f, t)) * 0.7f + 0.3f;
+            version++;
+            // the black surface shivers round the islands
+            if (((int) (time * 9f)) != ((int) ((time - dt) * 9f))) {
+                double a = time * 7.123;
+                float u = (float) Math.abs(Math.sin(a) * 43758.5453 % 1.0);
+                float v = (float) Math.abs(Math.sin(a * 1.3) * 24634.6345 % 1.0);
+                liquid.press(0.3f + u * 0.4f, 0.3f + v * 0.4f, 1f, 0.25f * tremor);
+            }
+        } else if (shift == 0) {
+            tremor = 0f;
+        }
         if (state == RISE) {
             rise = smooth(0.15f, RISE_TIME, stateAge);
             version++;
@@ -370,6 +438,7 @@ final class World {
         if (shard[i]) {
             shard[i] = false;
             shardsLeft--;
+            actLeft--;
             emit(EV_SHARD);
             if (shardsLeft == 0 && !open) {
                 open = true;
@@ -389,11 +458,24 @@ final class World {
         }
         emit(t == Level.GLASS ? EV_LAND_GLASS : t == Level.SPRING ? EV_LAND_SPRING : EV_LAND);
         state = PLAY;
+        countLanding();
         takeOff();
     }
 
     private void takeOff() {
         int t = typeAt(cellX, cellZ, cellF);
+        if (shift != 0) {
+            // through a shift the drop bounces on the spot, and keeps what it was asked for
+            toX = cellX;
+            toZ = cellZ;
+            toF = cellF;
+            leap = false;
+            fromY = toY = top(cellF);
+            hopTime = SPOT_TIME;
+            hopHigh = SPOT_HIGH;
+            hopAge = 0f;
+            return;
+        }
         if (pilot != null) order(t);
         plan(move);
         // a spring's throw leaves the order standing for the landing after it
@@ -426,6 +508,74 @@ final class World {
             version++;
             emit(EV_SINK);
         }
+    }
+
+    /**
+     * In a shifting level, every landing counts against the act. The ground starts to tremble
+     * three landings before the act runs out, or at once when its shards are all taken; three
+     * landings after that, it shifts.
+     */
+    private void countLanding() {
+        if (acts < 2 || act >= acts - 1 || shift != 0) return;
+        actHops++;
+        if (tremorFrom < 0 && (actLeft <= 0 || actHops >= budget - 3)) tremorFrom = actHops;
+        if (tremorFrom < 0) return;
+        if (actHops >= tremorFrom + 3) {
+            shift = 1;
+            shiftAge = 0f;
+            keep = level.index(cellX, cellZ, cellF);
+            tremorFrom = -1;
+            splash(cellX, cellZ, 3f, 2f);
+            emit(EV_SHIFT);
+            growNextAct();
+        } else {
+            emit(EV_TREMOR);
+        }
+    }
+
+    /** Grows the next act from the drop's island, on a thread when the stage asks for it. */
+    private void growNextAct() {
+        nextAct = null;
+        nextWay = null;
+        final int k = act + 1, x0 = cellX, z0 = cellZ, f0 = cellF, carried = Math.max(0, actLeft);
+        final boolean watched = pilot != null;
+        Runnable job = new Runnable() {
+            @Override
+            public void run() {
+                Level l = Maze.act(index, k, x0, z0, f0, carried, cols, rows, floors);
+                if (watched) nextWay = Solver.path(l, 600000);
+                nextAct = l;
+            }
+        };
+        if (async) {
+            Thread t = new Thread(job, "act");
+            t.setDaemon(true);
+            t.start();
+        } else {
+            job.run();
+        }
+    }
+
+    /** The old act is down: the new one takes its place, still under the liquid, and starts to rise. */
+    private void swapAct() {
+        level = nextAct;
+        type = level.type.clone();
+        shard = level.shard.clone();
+        bead = level.bead.clone();
+        sink = new float[type.length];
+        dent = new float[type.length];
+        act++;
+        actHops = 0;
+        actLeft = level.shards();
+        budget = act >= acts - 1 ? Integer.MAX_VALUE : Math.max(4, level.hops) + 4;
+        if (pilot != null) {
+            pilot = nextWay;
+            pilotAt = 0;
+        }
+        tremor = 0f;
+        shift = 2;
+        shiftAge = 0f;
+        version++;
     }
 
     /** The watcher's order for the hop about to start: the same turn and swipes a finger would give. */

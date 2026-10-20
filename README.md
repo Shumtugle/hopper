@@ -25,6 +25,11 @@ over the liquid, and the level rises out of it.
 - **Mirages** look like islands and hold nothing. The map does not show them,
   and on every mirage a reflection of the drop bounces in step with you.
 
+Some levels **shift**. They come in acts: after a number of landings the ground
+trembles for three bounces, then everything but the island under you goes down
+into the liquid and a new act rises around you. Shards you did not reach move on
+to the next act; the gate waits in the last one.
+
 The first ten levels are drawn by hand. Every level after them is grown from
 its own number: a walk through the floors that obeys every rule becomes the way
 through, so each level can be won, and a solver picks the grown candidate whose

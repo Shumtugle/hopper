@@ -61,7 +61,7 @@ final class Hud {
      */
     private void watcher(World w) {
         eyeShown = false;
-        if (w.state == World.DARK || w.state == World.RISE) return;
+        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
         boolean playing = w.pilot != null;
         float fade = playing || thinking ? 1f
                 : (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
@@ -184,7 +184,7 @@ final class Hud {
         float mx = -0.5f + 0.035f + plate, my = aspect * 0.5f - 0.05f - plate;
         float cy = (float) Math.cos(w.yaw), sy = (float) Math.sin(w.yaw);
         // the map comes up after a turn, a tap or a mirror, and at the start, then fades away
-        if (w.state == World.DARK || w.state == World.RISE) return;
+        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
         float fade = (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0.4f)
                 * (w.pilot != null ? 1f : 1f - World.smooth(2.2f, 2.9f, w.mapAge));
         if (fade <= 0.01f) return;

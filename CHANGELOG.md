@@ -1,5 +1,14 @@
 # Changes
 
+## 1.2
+
+- Shifting levels: from the sixteenth on, about one in four comes in two or
+  three acts. Each act lasts a number of landings; three before its end the
+  ground trembles, then everything but the island under the drop goes down into
+  the liquid and the next act rises, grown from that island. Shards left behind
+  move on to the next act; only the last act has the gate.
+- The watcher plays shifting levels too, act by act.
+
 ## 1.1.1
 
 - The watcher plays at a finger's pace, and its eye sits in the top right corner.

@@ -73,9 +73,14 @@ final class Mesh {
                         v = rim(out, v, x, h, z, rimSize, 0.045f, 0.05f, film - 40f, t == Level.HOT ? HOT : 1.05f);
                     }
                     if (w.rise < 1f) {
-                        // the level rising out of the liquid at its start
-                        float up = w.under(f);
+                        // the level rising out of the liquid at its start, or an act giving way to the next
+                        float up = w.under(f, i);
                         for (int k = first; k < v; k++) out[k * FLOATS + 1] -= up;
+                    }
+                    if (w.tremor > 0f && i != w.keep) {
+                        // before a shift every island shudders, each a little out of step
+                        float shake = (float) Math.sin(w.time * 31f + i * 1.7f) * 0.03f * w.tremor;
+                        for (int k = first; k < v; k++) out[k * FLOATS + 1] += shake;
                     }
                     if (w.sink[i] > 0f) {
                         // going under: down, darkening to the black of the liquid
@@ -104,7 +109,7 @@ final class Mesh {
                 for (int x = 0; x < w.cols; x++) {
                     int i = w.level.index(x, z, f);
                     if (w.sink[i] > 0f) continue;
-                    float base = World.top(f) - w.under(f);
+                    float base = World.top(f) - w.under(f, i);
                     if (w.type[i] == Level.MIRAGE) {
                         // a mirage is a mirror: the drop sees itself bouncing on it, in step with its own bounce
                         v = sphere(out, v, x, base + 0.1f + lift, z, 0.1f);

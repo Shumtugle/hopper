@@ -227,6 +227,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     /** Sets up everything that belongs to one level: buffers sized for it, the liquid, the title. */
     private void prepareLevel() {
         World w = world;
+        // a shifting level grows its next act on a thread of its own, never in the frame
+        w.async = true;
         // the next level grows in the background while this one is played
         Level.prepare(w.index + 1);
         islandData = new float[Mesh.islandCapacity(w) * Mesh.FLOATS];

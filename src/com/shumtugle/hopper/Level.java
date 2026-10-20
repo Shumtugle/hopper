@@ -35,6 +35,8 @@ final class Level {
     final int[] aim;
     final int startX, startZ, startF;
     final String hint;
+    /** The fewest hops that win, when the maze maker has worked it out; -1 otherwise. */
+    int hops = -1;
 
     /** A level with one floor, drawn as its rows. */
     Level(String hint, String... map) {
