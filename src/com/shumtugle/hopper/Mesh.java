@@ -18,7 +18,7 @@ final class Mesh {
     /** In a quicksilver face's film slot: a rival's lilac, and the brighter lilac of one making for the gate. */
     static final float LILAC = 950f, LILAC_READY = 960f;
     /** The black drop's quicksilver, black with a burning rim. */
-    static final float BLACK = 980f;
+    static final float BLACK = 980f, BLACK_STARE = 990f;
     /** A cut face: bismuth sawn through and polished, pale with a pink sheen. */
     static final float FACE = 8f;
     /** Added to a shade: this face belongs to an island the cut passes through, and is clipped by it. */
@@ -134,7 +134,7 @@ final class Mesh {
             // the black drop
             int first = v;
             v = sphere(out, v, w.boss.x, w.boss.y + Boss.RADIUS, w.boss.z, Boss.RADIUS);
-            for (int k = first; k < v; k++) out[k * FLOATS + 6] = BLACK;
+            for (int k = first; k < v; k++) out[k * FLOATS + 6] = w.boss.staring ? BLACK_STARE : BLACK;
         }
         if (w.rivals != null) {
             // the lilac drops racing the drop to the gate; one that has all its shards burns brighter

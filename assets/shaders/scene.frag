@@ -61,7 +61,9 @@ void main() {
         float fres = 0.75 + 0.25 * pow(1.0 - c, 4.0);
         if (vTag.x > 965.0) {
             // the black drop: a dark mirror, and a rim that burns red and gold at a glance
-            col = (0.008 + e * 0.32) * fres * vec3(0.55, 0.5, 0.5) + vec3(1.0, 0.36, 0.1) * 0.55 * pow(1.0 - c, 3.0);
+            // staring up from under the drop, the rim flares and beats
+            float flare = vTag.x > 985.0 ? 2.2 + 0.8 * sin(uTime * 9.0) : 1.0;
+            col = (0.008 + e * 0.32) * fres * vec3(0.55, 0.5, 0.5) + vec3(1.0, 0.36, 0.1) * 0.55 * flare * pow(1.0 - c, 3.0 / flare);
         } else {
             vec3 tint = vTag.x > 955.0 ? vec3(1.05, 0.45, 1.25) : vTag.x > 900.0 ? vec3(0.72, 0.32, 1.0) : vec3(0.92, 0.95, 1.0);
             col = (0.04 + e * 1.3) * fres * tint;

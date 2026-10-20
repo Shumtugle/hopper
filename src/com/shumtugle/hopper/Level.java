@@ -113,6 +113,7 @@ final class Level {
     static Level get(int n) {
         if (n < 0) n = 0;
         if (n < MAPS.length) return MAPS[n];
+        if (n == Maze.BOSS) return ARENA;
         synchronized (GROWN) {
             Level l = GROWN.get(n);
             if (l == null) {
@@ -136,6 +137,28 @@ final class Level {
         t.setPriority(Thread.MIN_PRIORITY);
         t.start();
     }
+
+    /**
+     * The black drop's arena, drawn by hand: open ground with nothing on it to stumble on, and in
+     * two corners a slab of the floor above, each reached by a spring. From a slab's edge the
+     * ground below lies open on three sides: the place to come down from.
+     */
+    private static final Level ARENA = new Level("the black drop: come down on it from above",
+        new String[][] {{
+            "..#####",
+            "..#<###",
+            "#######",
+            "###S###",
+            "#######",
+            "###>#..",
+            "#####.."}, {
+            "##.....",
+            "##.....",
+            ".......",
+            ".......",
+            ".......",
+            ".....##",
+            ".....##"}});
 
     private static final Level[] MAPS = {
         new Level("swipe up to hop forward",

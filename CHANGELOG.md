@@ -1,5 +1,13 @@
 # Changes
 
+## 1.6.1
+
+- The black drop's level is drawn by hand: open ground and two slabs above it in
+  the corners, each reached by a spring, their edges open over the ground.
+- It stops to look up only where the drop could really come down on it, and its
+  rim flares while it does: the moment to jump. It plays a little slower, and
+  coming down on it counts a little more generously.
+
 ## 1.6
 
 - The black drop: the hundredth level is a fight. It comes for you by your own

@@ -16,7 +16,7 @@ import java.util.Random;
 final class Boss {
     static final float RADIUS = 0.21f;
     /** How often it bounces on the spot instead of hopping, and how fast it plays. */
-    private static final float HESITATE = 0.22f, LOOK_UP = 0.4f, STARE = 0.8f, PACE = 0.9f;
+    private static final float HESITATE = 0.22f, LOOK_UP = 0.45f, STARE = 0.85f, PACE = 0.85f;
     private static final float HOP_TIME = 0.72f, LEAP_TIME = 1.0f, SPOT_TIME = 0.62f, THROW_TIME = 1.2f;
     private static final float HOP_HIGH = 0.62f, LEAP_HIGH = 1.15f, SPOT_HIGH = 0.48f, FALL_FROM = 6f, FALL_TIME = 1.3f;
     private static final int[] DX = {0, 1, 0, -1}, DZ = {-1, 0, 1, 0};
@@ -29,6 +29,8 @@ final class Boss {
     private float age, time = FALL_TIME, high, fromY, toY;
     /** Falling in from above; out of play while the world is cut. */
     boolean falling = true, away;
+    /** It stands right under the drop, looking up. */
+    boolean staring;
     private final Random rnd;
     private static int made;
 
@@ -87,15 +89,17 @@ final class Boss {
      */
     boolean at(int x0, int z0, int f0) {
         if (away || falling && age / time < 0.85f) return false;
-        return Math.abs(x - x0) < 0.55f && Math.abs(z - z0) < 0.55f && y - World.top(f0) < 0.75f && y >= World.top(f0) - 0.05f;
+        return Math.abs(x - x0) < 0.6f && Math.abs(z - z0) < 0.6f && y - World.top(f0) < 0.9f && y >= World.top(f0) - 0.05f;
     }
 
     private void takeOff(World w) {
         // with the drop up above it, it stops and looks up more often, as if working out the way;
         // right under the drop it all but stands and stares: that is the moment to come down on it
-        boolean under = w.cellF > cf && Math.abs(w.cellX - cx) <= 2 && Math.abs(w.cellZ - cz) <= 2;
+        boolean under = w.cellF > cf && within(w);
         float doubt = under ? STARE : w.cellF > cf ? LOOK_UP : HESITATE;
         int[] m = rnd.nextFloat() < doubt ? null : next(w);
+        // standing and staring up: its rim burns brighter, and that is the moment to come down
+        staring = under && m == null;
         int kind;
         if (m == null) {
             tx = cx;
@@ -113,6 +117,23 @@ final class Boss {
         time = kind == World.STILL ? SPOT_TIME : kind == World.THROW ? THROW_TIME : kind == World.LEAP ? LEAP_TIME : HOP_TIME;
         high = (kind == World.STILL ? SPOT_HIGH : kind == World.HOP ? HOP_HIGH : LEAP_HIGH) + Math.max(0f, toY - fromY);
         age = 0f;
+    }
+
+    /**
+     * Whether the drop, from the island it stands on, could come straight down on it: one hop or
+     * one leap that lands on its island. Only there it stops to stare, so the window is a real one.
+     */
+    private boolean within(World w) {
+        int x0 = w.cellX, z0 = w.cellZ, f = w.cellF;
+        for (int dz = -2; dz <= 2; dz++)
+            for (int dx = -2; dx <= 2; dx++) {
+                if (cx != x0 + dx || cz != z0 + dz) continue;
+                boolean leap = Math.abs(dx) == 2 || Math.abs(dz) == 2;
+                if (leap && dx != 0 && dz != 0) return false;
+                if (leap && (w.ceiling(x0, z0, f) || w.ceiling(x0 + dx / 2, z0 + dz / 2, f) || w.ceiling(cx, cz, f))) return false;
+                return w.landing(cx, cz, f) == cf;
+            }
+        return false;
     }
 
     /**
