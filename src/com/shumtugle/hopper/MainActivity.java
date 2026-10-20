@@ -110,6 +110,15 @@ public final class MainActivity extends Activity {
             sound.strikeLater(notes[on ? i : notes.length - 1 - i], 0.3f, 1.2f, i * 0.1f);
     }
 
+    /** Whether the black drop has been beaten: the game is won, and goes on. */
+    boolean crowned() {
+        return prefs.getBoolean("crowned", false);
+    }
+
+    void onCrowned() {
+        prefs.edit().putBoolean("crowned", true).apply();
+    }
+
     /** The level last written down: where the game was before the developer's mode. */
     int savedLevel() {
         return Math.max(0, prefs.getInt("level", 0));
@@ -271,6 +280,35 @@ public final class MainActivity extends Activity {
                 sound.strike(293.66f, 0.3f, 1.6f);
                 sound.strikeLater(440f, 0.25f, 1.4f, 0.15f);
                 break;
+            case World.EV_BOSS_LAND:
+                // the black drop is heavy: a low thud wherever it lands
+                sound.thud(70f, 34f, 0.5f, 0.35f);
+                break;
+            case World.EV_STRIKE:
+                // it lands on the drop
+                sound.knock(150f, 0.6f, 0.06f);
+                sound.thud(120f, 40f, 0.9f, 0.5f);
+                thump(true);
+                break;
+            case World.EV_RUPTURE:
+                // the world is cut: a long low grinding of stone, and the phone shudders with it
+                sound.thud(55f, 28f, 0.9f, 1.6f);
+                sound.strike(55f, 0.55f, 2.6f);
+                sound.strikeLater(58.27f, 0.45f, 2.6f, 0.25f);
+                sound.strikeLater(51.91f, 0.4f, 2.8f, 0.6f);
+                grind();
+                break;
+            case World.EV_CRUSHED:
+                sound.strike(41.2f, 0.8f, 3f);
+                sound.strikeLater(43.65f, 0.6f, 3f, 0.2f);
+                thump(true);
+                break;
+            case World.EV_STOMP:
+                // down on it from above: the black drop is beaten
+                sound.thud(90f, 30f, 0.9f, 0.6f);
+                for (int i = 0; i < 6; i++) sound.strikeLater(SCALE[Math.min(SCALE.length - 1, i + 3)], 0.5f, 2.2f, 0.2f + i * 0.14f);
+                thump(true);
+                break;
             case World.EV_RIVAL_READY:
                 // a rival has all its shards: two bells, a tritone apart, and it makes for the gate
                 sound.strike(311.13f, 0.3f, 1.4f);
@@ -312,6 +350,19 @@ public final class MainActivity extends Activity {
         if (v == null || !v.hasVibrator()) return;
         if (Build.VERSION.SDK_INT >= 29) v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK));
         else v.vibrate(VibrationEffect.createOneShot(6, 60));
+    }
+
+    /** A long uneven shudder, as of stone grinding on stone. */
+    private void grind() {
+        Vibrator v = vibrator;
+        if (v == null || !v.hasVibrator()) return;
+        if (v.hasAmplitudeControl()) {
+            long[] t = {0, 60, 30, 80, 25, 120, 40, 90, 60, 160};
+            int[] a = {0, 120, 40, 180, 60, 220, 70, 150, 40, 90};
+            v.vibrate(VibrationEffect.createWaveform(t, a, -1));
+        } else {
+            v.vibrate(VibrationEffect.createWaveform(new long[] {0, 120, 60, 200, 80, 160}, -1));
+        }
     }
 
     private void thump(boolean strong) {

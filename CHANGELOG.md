@@ -1,5 +1,17 @@
 # Changes
 
+## 1.6
+
+- The black drop: the hundredth level is a fight. It comes for you by your own
+  rules; landing on your island it strikes and cuts the world in two, the half
+  without you tipping into the black and the cut islands showing their steps in
+  section. Two strikes and you are lost. Come down on it from a floor above to
+  beat it; right under you it stops and looks up.
+- The end: beaten, it leaves the world you grew in gold under a rose dawn, the
+  game won and the levels going on. A hopscotch mark then stands between the map
+  and the eye: the open mode, every level and every world.
+- The open mode shows the world of each number behind the hopscotch.
+
 ## 1.5.1
 
 - Rivals are clumsier: slower, more often in doubt, more often in the liquid,

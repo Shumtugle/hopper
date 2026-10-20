@@ -1,6 +1,12 @@
 // Shared by every pass: the oxide film and the invisible studio around the scene.
 // Directions here are y-up.
 
+// How far the world has turned to gold, 0 to 1: the black drop is beaten, and a low sun comes up
+// over it in a rose-pink sky. Left alone, it is 0 and the night stays as it was.
+uniform float uGold;
+// where that sun stands, just over the horizon
+const vec3 SUN = vec3(0.62, 0.2, -0.76);
+
 // Colour of light reflected by a thin transparent film on a mirror.
 // d is the thickness in nanometres, c the cosine of the angle inside the film.
 vec3 film(float d, float c) {
@@ -27,6 +33,16 @@ vec3 env(vec3 r) {
     c += vec3(0.75, 0.88, 1.0) * 4.0 * (1.0 - smoothstep(0.018, 0.032, across)) * smoothstep(0.80, 0.86, dot(r, sc));
     float wash = dot(r, normalize(vec3(0.1, 0.8, -0.62)));
     c += vec3(0.55, 0.62, 0.8) * 0.35 * smoothstep(0.86, 0.97, wash);
+    if (uGold > 0.0) {
+        // the sun, and a rose sky all round that every mirror catches
+        c *= 1.0 - 0.5 * uGold;
+        c += uGold * vec3(1.0, 0.75, 0.4) * 6.0 * smoothstep(0.996, 0.999, dot(r, normalize(SUN)));
+        c += uGold * vec3(1.0, 0.5, 0.2) * 0.8 * pow(max(dot(r, normalize(SUN)), 0.0), 8.0);
+        c += uGold * vec3(0.8, 0.28, 0.42) * 0.22 * smoothstep(-0.2, 0.8, r.y);
+        // a bright band of gold all round the horizon, brightest under the sun: what makes metal gleam
+        float toward = 0.5 + 0.5 * dot(normalize(vec3(r.x, 0.0, r.z) + 1e-5), normalize(vec3(SUN.x, 0.0, SUN.z)));
+        c += uGold * vec3(1.0, 0.55, 0.16) * 1.4 * exp(-r.y * r.y * 9.0) * (0.25 + toward * toward);
+    }
     return c;
 }
 
@@ -38,7 +54,11 @@ vec3 tonemap(vec3 c) {
 // and the islands a rim. Only the first-person view needs it.
 vec3 haze(vec3 r) {
     float k = exp(-r.y * r.y * 220.0);
-    return vec3(0.32, 0.36, 0.5) * 0.045 * k;
+    vec3 night = vec3(0.32, 0.36, 0.5) * 0.045 * k;
+    // at dawn the band burns rose and gold, brightest towards the sun
+    float wide = exp(-r.y * r.y * 14.0), toward = 0.5 + 0.5 * dot(normalize(vec3(r.x, 0.0, r.z) + 1e-5), normalize(vec3(SUN.x, 0.0, SUN.z)));
+    vec3 dawn = mix(vec3(0.75, 0.18, 0.38), vec3(1.0, 0.55, 0.15), toward) * (0.12 * wide + 0.35 * k) * (0.4 + toward);
+    return mix(night, dawn, uGold);
 }
 
 // Everything far away melts into the black.
@@ -53,5 +73,5 @@ vec3 stars(vec3 d) {
     float seed = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
     vec2 at = fract(g) - 0.5 - (vec2(fract(seed * 13.7), fract(seed * 71.3)) - 0.5) * 0.6;
     float star = step(0.985, seed) * (1.0 - smoothstep(0.0, 0.18, length(at))) * smoothstep(0.0, 0.15, d.y);
-    return vec3(0.7, 0.75, 0.9) * star * 0.25 * fract(seed * 997.0);
+    return vec3(0.7, 0.75, 0.9) * star * 0.25 * fract(seed * 997.0) * (1.0 - uGold);
 }

@@ -10,16 +10,24 @@ package com.shumtugle.hopper;
  *   5         quicksilver; with a film of LILAC or more, a rival's lilac
  *   6         hot bismuth, glowing from inside
  *   7         glass
+ *   8         a cut face
+ *   20 and up the same, on an island the cut passes through: clipped by the cut
  */
 final class Mesh {
     static final int FLOATS = 8;
     /** In a quicksilver face's film slot: a rival's lilac, and the brighter lilac of one making for the gate. */
     static final float LILAC = 950f, LILAC_READY = 960f;
+    /** The black drop's quicksilver, black with a burning rim. */
+    static final float BLACK = 980f;
+    /** A cut face: bismuth sawn through and polished, pale with a pink sheen. */
+    static final float FACE = 8f;
+    /** Added to a shade: this face belongs to an island the cut passes through, and is clipped by it. */
+    static final float CLIPPED = 20f;
     static final float GLOW = 3f, SILVER = 5f, HOT = 6f, GLASS = 7f;
 
     private static final int BOX = 36;
-    /** Vertices one island can take: three steps, a rim of four and a wall or a stud. */
-    private static final int ISLAND = 8 * BOX;
+    /** Vertices one island can take: three steps, a rim of four and a wall or a stud, and their cut faces. */
+    private static final int ISLAND = 8 * BOX + 8 * 6;
 
     private Mesh() {}
 
@@ -79,6 +87,10 @@ final class Mesh {
                         float rimSize = f == 0 ? 0.26f + (0.39f - 0.26f) * m : 0.39f;
                         v = rim(out, v, x, h, z, rimSize, 0.045f, 0.05f, film - 40f, t == Level.HOT ? HOT : 1.05f);
                     }
+                    if (w.cut && !w.cutAway[i] && w.sink[i] <= 0f) {
+                        float c = w.cutX * x + w.cutZ * z + w.cutD;
+                        if (c > -0.5f) v = sawn(w, out, first, v);
+                    }
                     if (w.rise < 1f) {
                         // the level rising out of the liquid at its start, or an act giving way to the next
                         float up = w.under(f, i);
@@ -92,9 +104,13 @@ final class Mesh {
                     if (w.sink[i] > 0f) {
                         // going under: down, darkening to the black of the liquid
                         float s = w.sink[i], drop = s * s * (1.8f + h), dim = (1f - s) * (1f - s);
+                        // what the cut sent away tips over the edge as it goes
+                        float tip = w.cutAway != null && w.cutAway[i] ? s * s * 1.4f : 0f;
                         for (int k = first; k < v; k++) {
                             int o = k * FLOATS;
+                            out[o] += w.cutX * tip;
                             out[o + 1] -= drop;
+                            out[o + 2] += w.cutZ * tip;
                             if (out[o + 7] < 2f) out[o + 7] *= dim;
                         }
                     }
@@ -113,6 +129,12 @@ final class Mesh {
         if (w.lift > 0.05f) {
             // seen from above through a shift, the drop itself is there to be found
             v = sphere(out, v, w.x, w.y + DROP, w.z, DROP);
+        }
+        if (w.boss != null && !w.boss.away) {
+            // the black drop
+            int first = v;
+            v = sphere(out, v, w.boss.x, w.boss.y + Boss.RADIUS, w.boss.z, Boss.RADIUS);
+            for (int k = first; k < v; k++) out[k * FLOATS + 6] = BLACK;
         }
         if (w.rivals != null) {
             // the lilac drops racing the drop to the gate; one that has all its shards burns brighter
@@ -224,6 +246,53 @@ final class Mesh {
 
     /** The drop's radius; the mirage shader looks for a ball this size where the drop is. */
     static final float DROP = 0.14f;
+
+    /**
+     * An island the cut passes through: every box of it is marked to be clipped by the cut, and
+     * where the plane goes through a box, a flat face closes it, so the island shows its steps
+     * in section like a sawn stone. The boxes are the island's own, BOX vertices each.
+     */
+    private static int sawn(World w, float[] out, int first, int v) {
+        float nx = w.cutX, nz = w.cutZ, d = w.cutD;
+        // the cut line, as a point on it and a direction along it
+        float ox = -nx * d, oz = -nz * d, ux = -nz, uz = nx;
+        int end = v;
+        for (int b = first; b + BOX <= end; b += BOX) {
+            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f;
+            for (int k = b; k < b + BOX; k++) {
+                int o = k * FLOATS;
+                x0 = Math.min(x0, out[o]); x1 = Math.max(x1, out[o]);
+                y0 = Math.min(y0, out[o + 1]); y1 = Math.max(y1, out[o + 1]);
+                z0 = Math.min(z0, out[o + 2]); z1 = Math.max(z1, out[o + 2]);
+                out[o + 7] += CLIPPED;
+            }
+            // where the line crosses the box's footprint
+            float t0 = -1e9f, t1 = 1e9f;
+            float[] lo = {x0, z0}, hi = {x1, z1}, org = {ox, oz}, dir = {ux, uz};
+            boolean miss = false;
+            for (int a = 0; a < 2 && !miss; a++) {
+                if (Math.abs(dir[a]) < 1e-6f) {
+                    if (org[a] < lo[a] || org[a] > hi[a]) miss = true;
+                    continue;
+                }
+                float ta = (lo[a] - org[a]) / dir[a], tb = (hi[a] - org[a]) / dir[a];
+                t0 = Math.max(t0, Math.min(ta, tb));
+                t1 = Math.min(t1, Math.max(ta, tb));
+            }
+            if (miss || t1 <= t0) continue;
+            float film = out[b * FLOATS + 6];
+            // a hair on the near side of the plane, facing the side that went away
+            float ax = ox + ux * t0 - nx * 0.002f, az = oz + uz * t0 - nz * 0.002f;
+            float bx = ox + ux * t1 - nx * 0.002f, bz = oz + uz * t1 - nz * 0.002f;
+            v = vert(out, v, ax, y0, az, nx, 0f, nz, film, FACE);
+            v = vert(out, v, bx, y0, bz, nx, 0f, nz, film, FACE);
+            v = vert(out, v, bx, y1, bz, nx, 0f, nz, film, FACE);
+            v = vert(out, v, ax, y0, az, nx, 0f, nz, film, FACE);
+            v = vert(out, v, bx, y1, bz, nx, 0f, nz, film, FACE);
+            v = vert(out, v, ax, y1, az, nx, 0f, nz, film, FACE);
+        }
+        return v;
+    }
 
     /** Huge hoppers far out in the liquid, so the eye has a horizon to hold on to. */
     static int distance(World w, float[] out) {

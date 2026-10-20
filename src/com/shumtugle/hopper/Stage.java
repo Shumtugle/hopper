@@ -58,6 +58,21 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
      */
     private boolean dev;
     private static final int DEV_AHEAD = 1000;
+    /** The black drop has been beaten; the dark just after that is the end, with the world turning gold. */
+    private boolean crowned, ending;
+    /** How far everything lit is turned to gold this frame. */
+    private float gold;
+
+    // the open mode's world behind the hopscotch: as big as the number the strip stands at,
+    // grown on a thread of its own, a few dozen pieces ahead of what is shown
+    private City preview;
+    private int[] previewEnds;
+    private int previewBuf, previewShown;
+    private volatile City previewNext;
+    private volatile float[] previewMesh;
+    private volatile int[] previewNextEnds;
+    private volatile boolean previewGrowing;
+    private static final int PREVIEW_MOST = 800;
     private float lastMoveY;
 
     // a funnel's detour: the level it poured the drop out of, how often, and where it went last
@@ -75,7 +90,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     /** The stroke started as a straight swipe up and may still stretch into a leap. */
     private boolean stretching;
 
-    private int sky, liquid, scene, mirage, hud, text;
+    private int sky, liquid, scene, sceneCut, mirage, hud, text;
     private int triBuf, liquidBuf, islandBuf, movingBuf, farBuf, hudBuf, quadBuf, mirageBuf, cityBuf, freshBuf;
     private int fieldTex, titleTex, digitTex;
     private int islandVerts, movingVerts, farVerts, mirageVerts, islandVersion = -1;
@@ -118,6 +133,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         this.reached = Math.max(reached, level);
         this.marks = marks;
         dev = act.dev();
+        crowned = act.crowned();
         Rival.threads = true;
         setEGLContextClientVersion(3);
         setEGLConfigChooser(8, 8, 8, 8, 24, 0);
@@ -218,10 +234,11 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         liquid = program("liquid.vert", "liquid.frag");
         scene = program("scene.vert", "scene.frag");
         mirage = program("scene.vert", "mirage.frag");
+        sceneCut = program("scene.vert", "scene.frag", "#define CUT\n");
         hud = program("hud.vert", "hud.frag");
         text = program("text.vert", "text.frag");
-        int[] ids = new int[10];
-        GLES30.glGenBuffers(10, ids, 0);
+        int[] ids = new int[11];
+        GLES30.glGenBuffers(11, ids, 0);
         triBuf = ids[0];
         liquidBuf = ids[1];
         islandBuf = ids[2];
@@ -232,7 +249,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         mirageBuf = ids[7];
         cityBuf = ids[8];
         freshBuf = ids[9];
+        previewBuf = ids[10];
         city = null;
+        preview = null;
         upload2(triBuf, new float[] {-1, -1, 3, -1, -1, 3});
         upload2(quadBuf, new float[] {-1, -1, 1, -1, -1, 1, 1, 1});
         int[] tex = new int[3];
@@ -304,7 +323,11 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         cityRang = false;
         cityAge = 0f;
         cityLeave = -1f;
-        if (!cityShown) return;
+        if (!cityShown) {
+            ending = false;
+            return;
+        }
+        if (ending) makeCaption("the game is won", "and the levels go on");
         if (city == null || city.size() != pieces) city = new City(pieces);
         float ox = (w.cols - 1) * 0.5f, oz = (w.rows - 1) * 0.5f;
         float[] built = city.build(0, cityGrowing ? pieces - 1 : pieces, ox, oz);
@@ -347,6 +370,10 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             cityLeave += dt;
             if (cityLeave >= 1.1f) {
                 cityShown = false;
+                if (ending) {
+                    ending = false;
+                    makeTitle(w);
+                }
                 w.hold();
             }
         }
@@ -380,8 +407,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                     case UP_RIGHT: w.slanted(1); break;
                     case BACK: openChalk(); break;
                     case TAP: {
-                        float ex = x - Hud.eyeX(), ey = y - Hud.eyeY(aspect);
-                        if (hudShapes != null && hudShapes.eyeShown && ex * ex + ey * ey < Hud.EYE_R * Hud.EYE_R * 2.2f) summon();
+                        float ex = x - Hud.eyeX(), ey = y - Hud.eyeY(aspect), my = y - Hud.eyeY(aspect);
+                        if (hudShapes != null && hudShapes.markShown && x * x + my * my < Hud.MARK_R * Hud.MARK_R * 3f) {
+                            // the prize: every level open, and every world behind the strip; tapped
+                            // again, it closes, and the game is the one written down
+                            toggleDev();
+                        } else if (hudShapes != null && hudShapes.eyeShown && ex * ex + ey * ey < Hud.EYE_R * Hud.EYE_R * 2.2f) summon();
                         else if (cityShown && w.state == World.DARK) {
                             // the first tap sends the world under; the level wakes once it is gone
                             if (cityLeave < 0f) cityLeave = 0f;
@@ -457,6 +488,12 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             boolean watched = won && w.pilot != null;
             if (won) {
                 marks = solved(level, watched);
+                if (w.boss != null) {
+                    // the black drop is beaten: the game is won, and goes on
+                    if (!dev) act.onCrowned();
+                    crowned = true;
+                    ending = true;
+                }
                 level++;
                 // a level opened for the first time grows the world by a piece
                 if (level > reached || dev) cityOwed = true;
@@ -474,7 +511,18 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
         stepCity(w, dt);
         w.camera(eye, look);
-        if (cityShown) city.camera((w.cols - 1) * 0.5f, (w.rows - 1) * 0.5f, cityAge * 0.05f, fresh(), eye, look);
+        boolean previewing = chalk.open && dev && stepPreview();
+        if (previewing) {
+            preview.camera(previewCount(), (w.cols - 1) * 0.5f, (w.rows - 1) * 0.5f, w.time * 0.05f, null, eye, look);
+        } else if (cityShown) {
+            city.camera((w.cols - 1) * 0.5f, (w.rows - 1) * 0.5f, cityAge * 0.05f, fresh(), eye, look);
+        }
+        // gold: the end's dawn coming up over the world, and the world always golden after it
+        if (previewing || cityShown) gold = ending ? World.smooth(1.2f, 6.5f, cityAge) : crowned ? 1f : 0f;
+        else gold = w.boss != null && w.state == World.WIN ? World.smooth(0f, 1.2f, w.stateAge) : 0f;
+        hudShapes.crowned = crowned;
+        hudShapes.chalkVeil = dev ? 0.35f : 0.9f;
+        hudShapes.open = dev;
         Mat.lookAt(view, eye[0], eye[1], eye[2], look[0], look[1], look[2]);
         Mat.mul(mvp, proj, view);
 
@@ -505,7 +553,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private void drawSky() {
         GLES30.glDisable(GLES30.GL_DEPTH_TEST);
         GLES30.glDisable(GLES30.GL_BLEND);
-        GLES30.glUseProgram(sky);
+        use(sky);
         // the camera's own axes, straight out of the view matrix
         GLES30.glUniform3f(loc(sky, "uRight"), view[0], view[4], view[8]);
         GLES30.glUniform3f(loc(sky, "uUp"), view[1], view[5], view[9]);
@@ -523,7 +571,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         fieldOut.put(lq.texels).position(0);
         GLES30.glEnable(GLES30.GL_DEPTH_TEST);
         GLES30.glDepthFunc(GLES30.GL_LEQUAL);
-        GLES30.glUseProgram(liquid);
+        use(liquid);
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fieldTex);
         GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, 0, lq.cols, lq.rows,
@@ -539,6 +587,17 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     }
 
     private void drawScene(World w) {
+        if (chalk.open && dev && preview != null) {
+            // the open mode: only the world of the number the strip stands at
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST);
+            use(scene);
+            GLES30.glUniformMatrix4fv(loc(scene, "uMvp"), 1, false, mvp, 0);
+            GLES30.glUniform3f(loc(scene, "uEye"), eye[0], eye[1], eye[2]);
+            GLES30.glUniform1f(loc(scene, "uTime"), w.time);
+            GLES30.glUniform1f(loc(scene, "uFilm"), 0f);
+            drawMesh(previewBuf, previewEnds[Math.min(previewCount(), preview.size()) - 1]);
+            return;
+        }
         if (w.version != islandVersion) {
             islandVersion = w.version;
             islandVerts = Mesh.islands(w, islandData);
@@ -547,12 +606,24 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         movingVerts = Mesh.moving(w, movingData);
         upload(movingBuf, movingData, movingVerts, GLES30.GL_STREAM_DRAW);
         GLES30.glEnable(GLES30.GL_DEPTH_TEST);
-        GLES30.glUseProgram(scene);
+        use(scene);
         GLES30.glUniformMatrix4fv(loc(scene, "uMvp"), 1, false, mvp, 0);
         GLES30.glUniform3f(loc(scene, "uEye"), eye[0], eye[1], eye[2]);
         GLES30.glUniform1f(loc(scene, "uTime"), w.time);
         GLES30.glUniform1f(loc(scene, "uFilm"), w.film);
-        drawMesh(islandBuf, islandVerts);
+        if (w.cut) {
+            // after the black drop's strike the islands the cut passes through are clipped by it
+            use(sceneCut);
+            GLES30.glUniformMatrix4fv(loc(sceneCut, "uMvp"), 1, false, mvp, 0);
+            GLES30.glUniform3f(loc(sceneCut, "uEye"), eye[0], eye[1], eye[2]);
+            GLES30.glUniform1f(loc(sceneCut, "uTime"), w.time);
+            GLES30.glUniform1f(loc(sceneCut, "uFilm"), w.film);
+            GLES30.glUniform3f(loc(sceneCut, "uCut"), w.cutX, w.cutZ, w.cutD);
+            drawMesh(islandBuf, islandVerts);
+            use(scene);
+        } else {
+            drawMesh(islandBuf, islandVerts);
+        }
         drawMesh(movingBuf, movingVerts);
         // the world in the dark is its own horizon; the far hoppers belong to the level
         if (cityShown) drawCity(w);
@@ -569,7 +640,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         mirageVerts = Mesh.mirages(w, mirageData);
         if (mirageVerts == 0) return;
         upload(mirageBuf, mirageData, mirageVerts, GLES30.GL_STREAM_DRAW);
-        GLES30.glUseProgram(mirage);
+        use(mirage);
         GLES30.glUniformMatrix4fv(loc(mirage, "uMvp"), 1, false, mvp, 0);
         GLES30.glUniform3f(loc(mirage, "uEye"), eye[0], eye[1], eye[2]);
         GLES30.glUniform4f(loc(mirage, "uDrop"), w.x, w.y + Mesh.DROP, w.z, Mesh.DROP);
@@ -589,7 +660,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         System.arraycopy(mvp, 0, mvpCity, 0, 16);
         // the whole world goes down at once: one step down in y, in front of the camera's matrix
         for (int r = 0; r < 4; r++) mvpCity[12 + r] -= down * mvp[4 + r];
-        GLES30.glUseProgram(scene);
+        use(scene);
         GLES30.glUniformMatrix4fv(loc(scene, "uMvp"), 1, false, mvpCity, 0);
         drawMesh(cityBuf, cityVerts);
         City.Piece p = fresh();
@@ -763,10 +834,15 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     /** The level's number and its hint, for the first seconds of every try. */
     private void drawTitle(World w) {
         float a;
-        float t = w.act > 0 ? w.actAge : w.awake - 1.2f;
-        if (t < 0f) return;
-        if (t < 0.4f) a = t / 0.4f;
-        else a = 1f - World.smooth(3.2f, 4.2f, t);
+        if (ending && cityShown) {
+            // the end's words come up with the dawn and go with the world
+            a = World.smooth(4.5f, 6.5f, cityAge) * (cityLeave < 0f ? 1f : 1f - World.smooth(0f, 0.6f, cityLeave));
+        } else {
+            float t = w.act > 0 ? w.actAge : w.awake - 1.2f;
+            if (t < 0f) return;
+            if (t < 0.4f) a = t / 0.4f;
+            else a = 1f - World.smooth(3.2f, 4.2f, t);
+        }
         if (a <= 0f) return;
         GLES30.glDisable(GLES30.GL_DEPTH_TEST);
         GLES30.glEnable(GLES30.GL_BLEND);
@@ -810,6 +886,76 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         linear();
         GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, b, 0);
         b.recycle();
+    }
+
+    /** The title's place, holding words of its own: the end's. */
+    private void makeCaption(String big, String small) {
+        Bitmap b = Bitmap.createBitmap(TITLE_W, TITLE_H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFFFFFFFF);
+        p.setTextAlign(Paint.Align.CENTER);
+        p.setTypeface(Typeface.create(Typeface.SERIF, Typeface.ITALIC));
+        p.setTextSize(120f);
+        c.drawText(big, TITLE_W / 2f, 165f, p);
+        p.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));
+        p.setTextSize(52f);
+        p.setLetterSpacing(0.06f);
+        c.drawText(small, TITLE_W / 2f, 290f, p);
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, titleTex);
+        linear();
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, b, 0);
+        b.recycle();
+    }
+
+    /** The number the hopscotch stands at, for the open mode's world: one piece for every level before it. */
+    private int previewCount() {
+        int row = Math.max(0, Math.round(chalk.scroll) + 2);
+        return Math.max(1, Math.min(PREVIEW_MOST, Chalk.firstOf(row)));
+    }
+
+    /**
+     * Keeps the open mode's world grown far enough for the strip: a world a little bigger than
+     * needed is grown on a thread and taken up here once ready. False while there is none yet.
+     */
+    private boolean stepPreview() {
+        float[] mesh = previewMesh;
+        if (mesh != null) {
+            previewMesh = null;
+            preview = previewNext;
+            previewEnds = previewNextEnds;
+            FloatBuffer f = ByteBuffer.allocateDirect(Math.max(4, mesh.length * 4)).order(ByteOrder.nativeOrder()).asFloatBuffer();
+            f.put(mesh).position(0);
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, previewBuf);
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, Math.max(4, mesh.length * 4), f, GLES30.GL_STATIC_DRAW);
+            previewGrowing = false;
+        }
+        final int want = previewCount();
+        if (!previewGrowing && (preview == null || preview.size() < want)) {
+            previewGrowing = true;
+            final int size = Math.min(PREVIEW_MOST, (want / 64 + 1) * 64);
+            final float ox = (world.cols - 1) * 0.5f, oz = (world.rows - 1) * 0.5f;
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    City c = new City(size);
+                    int[] ends = new int[size];
+                    float[] m = c.build(0, size, ox, oz, ends);
+                    previewNext = c;
+                    previewNextEnds = ends;
+                    previewMesh = m;
+                }
+            }, "world");
+            t.setDaemon(true);
+            t.start();
+        }
+        return preview != null;
+    }
+
+    /** Binds a lit program and gives it this frame's gold. */
+    private void use(int prog) {
+        GLES30.glUseProgram(prog);
+        GLES30.glUniform1f(loc(prog, "uGold"), gold);
     }
 
     // ---- plumbing ----
@@ -865,9 +1011,14 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     }
 
     private int program(String vert, String frag) {
+        return program(vert, frag, "");
+    }
+
+    /** Builds a program; the defines go into the fragment shader ahead of the shared code. */
+    private int program(String vert, String frag, String defines) {
         String common = asset("shaders/common.glsl");
         int v = shader(GLES30.GL_VERTEX_SHADER, asset("shaders/" + vert).replace("#include common", common));
-        int f = shader(GLES30.GL_FRAGMENT_SHADER, asset("shaders/" + frag).replace("#include common", common));
+        int f = shader(GLES30.GL_FRAGMENT_SHADER, asset("shaders/" + frag).replace("#include common", defines + common));
         int p = GLES30.glCreateProgram();
         GLES30.glAttachShader(p, v);
         GLES30.glAttachShader(p, f);

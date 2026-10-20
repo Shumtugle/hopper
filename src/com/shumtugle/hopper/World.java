@@ -33,6 +33,10 @@ package com.shumtugle.hopper;
  * After the plateau some levels bring rivals: lilac drops, each playing its own copy of the
  * level, racing the drop to the gate. One that gets there first loses the level for the drop.
  *
+ * The hundredth level is the black drop's: no shards, no gate. It strikes by landing on the
+ * drop's island; the first strike cuts the world along a random line, the half without the drop
+ * going under; the second loses the level. Come down on it from a floor above, and it is beaten.
+ *
  * The watcher can play a level instead: it is handed the solver's moves and, at each landing,
  * orders the next hop exactly as a finger would (a turn, a step, a leap, a slant). A swipe takes
  * the drop back from it.
@@ -40,13 +44,14 @@ package com.shumtugle.hopper;
 final class World {
     // states
     static final int FALL_IN = 0, PLAY = 1, DROWN = 2, BURN = 3, WIN = 4, DARK = 5, RISE = 6, FUNNEL = 7,
-            BEATEN = 8;
+            BEATEN = 8, CRUSHED = 9;
 
     // events for sound and touch feedback
     static final int EV_LAND = 1, EV_LAND_GLASS = 2, EV_LAND_SPRING = 3, EV_SHARD = 4, EV_BEAD = 5,
             EV_COOL = 6, EV_OPEN = 7, EV_WIN = 8, EV_DROWN = 9, EV_BURN = 10, EV_SINK = 11, EV_TURN = 12,
             EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16, EV_TREMOR = 17, EV_SHIFT = 18,
-            EV_RISEN = 19, EV_FUNNEL = 20, EV_ECHO = 21, EV_BEATEN = 22, EV_RIVAL_READY = 23;
+            EV_RISEN = 19, EV_FUNNEL = 20, EV_ECHO = 21, EV_BEATEN = 22, EV_RIVAL_READY = 23,
+            EV_BOSS_LAND = 24, EV_STRIKE = 25, EV_RUPTURE = 26, EV_CRUSHED = 27, EV_STOMP = 28;
     /** A shard humming: EV_HUM + rank * 16 + loudness, 1 to 15. */
     static final int EV_HUM = 1000;
     /** A rival landing near the drop: EV_RIVAL + loudness, 1 to 15. */
@@ -131,6 +136,21 @@ final class World {
     final Rival[] rivals;
     /** In a rival's own copy of the level: the rival, asked at every landing what to do. */
     Rival brain;
+    /** The black drop of the hundredth level, or null. */
+    final Boss boss;
+    /** How many times it has struck; the second time the drop is lost. */
+    int hits;
+    private float bossWait = 2.5f;
+    /**
+     * The cut of the world after a strike: the plane cutX * x + cutZ * z + cutD = 0, everything
+     * on its positive side gone into the black. cutAge counts seconds since it fell; the world
+     * holds still while the eye watches.
+     */
+    boolean cut;
+    float cutX, cutZ, cutD, cutAge;
+    /** Islands the cut sent under, which tip over the edge as they go. */
+    boolean[] cutAway;
+    static final float CUT_TIME = 3.4f;
     /** Seconds since the map was last called up; it shows for a moment and fades. */
     float mapAge = -1.5f;
     private final int[] move = new int[3];
@@ -166,6 +186,7 @@ final class World {
         int racers = ghost || index < Level.drawn() ? 0 : Maze.rivals(index);
         rivals = racers == 0 ? null : new Rival[racers];
         for (int k = 0; k < racers; k++) rivals[k] = new Rival(index, k, Rival.threads);
+        boolean fight = !ghost && Maze.boss(index);
         level = Level.get(index);
         cols = level.cols;
         rows = level.rows;
@@ -184,6 +205,14 @@ final class World {
             shardsLeft = shardsTotal;
             budget = Math.max(4, level.hops) + 4;
         }
+        if (fight) {
+            // the black drop's board: no shards, no gate; the only way through is down onto it
+            for (int i = 0; i < type.length; i++) {
+                shard[i] = false;
+                if (type[i] == Level.GATE) type[i] = Level.STONE;
+            }
+            shardsLeft = shardsTotal = actLeft = 0;
+        }
         open = shardsTotal == 0;
         cellX = toX = level.startX;
         cellZ = toZ = level.startZ;
@@ -200,6 +229,12 @@ final class World {
         liquid = new Liquid(112, 112);
         state = dark ? DARK : RISE;
         rise = 0f;
+        if (fight) {
+            boss = new Boss(this, index);
+            boss.away = true;
+        } else {
+            boss = null;
+        }
     }
 
     // ---- input, from the render thread ----
@@ -229,6 +264,110 @@ final class World {
         float d = (float) Math.sqrt(dx * dx + dz * dz + dy * dy);
         if (d > 4f) return;
         emit(EV_RIVAL + Math.max(1, Math.min(15, Math.round(15f * (1f - d / 4f)))));
+    }
+
+    /** True while the world is being cut and the eye watches it. */
+    boolean cutting() {
+        return cut && cutAge < CUT_TIME;
+    }
+
+    /** The black drop has landed: on the drop's island, near the bottom of its bounce, it strikes. */
+    void bossLanded(Boss b) {
+        emit(EV_BOSS_LAND);
+        splash(b.cx, b.cz, 1.1f, 0.7f);
+        if (state != PLAY || b.cx != cellX || b.cz != cellZ || b.cf != cellF) return;
+        // the drop is there too, not yet high in its own bounce: struck
+        if (y - top(cellF) < 0.75f) strike();
+    }
+
+    /** The black drop strikes: the first time the world is cut in two, the second the drop is lost. */
+    private void strike() {
+        hits++;
+        pilot = null;
+        boss.away = true;
+        emit(EV_STRIKE);
+        if (hits >= 2) {
+            state = CRUSHED;
+            stateAge = 0f;
+            emit(EV_CRUSHED);
+            return;
+        }
+        rupture();
+        bossWait = CUT_TIME + 0.8f;
+    }
+
+    /**
+     * Cuts the world along a random line, the way a finger might slash across the screen: the
+     * half without the drop goes into the black. Of the lines tried, the one is taken that leaves
+     * about half the board and still lets the drop get up above some island the black drop can
+     * stand on, so the level can still be won; with none such, nothing is cut.
+     */
+    private void rupture() {
+        java.util.Random r = new java.util.Random(index * 31L + hits * 977L + (long) (time * 1000f));
+        float bestScore = Float.MAX_VALUE, bx = 0f, bz = 0f, bd = 0f;
+        int islands = 0;
+        for (int i = 0; i < type.length; i++) if (type[i] != Level.LIQUID && sink[i] <= 0f) islands++;
+        for (int tries = 0; tries < 48; tries++) {
+            double a = r.nextDouble() * Math.PI * 2;
+            float nx = (float) Math.cos(a), nz = (float) Math.sin(a);
+            float px = r.nextFloat() * (cols - 1), pz = r.nextFloat() * (rows - 1);
+            float d = -(nx * px + nz * pz);
+            float own = nx * cellX + nz * cellZ + d;
+            if (Math.abs(own) < 0.8f) continue;
+            if (own > 0f) {
+                nx = -nx;
+                nz = -nz;
+                d = -d;
+            }
+            int kept = 0;
+            for (int i = 0; i < type.length; i++) {
+                if (type[i] == Level.LIQUID || sink[i] > 0f) continue;
+                int c = i % (cols * rows);
+                if (nx * (c % cols) + nz * (c / cols) + d < 0f) kept++;
+            }
+            float share = kept / (float) Math.max(1, islands);
+            if (share < 0.35f || share > 0.75f) continue;
+            if (!stompable(nx, nz, d)) continue;
+            float score = Math.abs(share - 0.5f) + r.nextFloat() * 0.05f;
+            if (score < bestScore) {
+                bestScore = score;
+                bx = nx;
+                bz = nz;
+                bd = d;
+            }
+        }
+        if (bestScore == Float.MAX_VALUE) return;
+        cut = true;
+        cutX = bx;
+        cutZ = bz;
+        cutD = bd;
+        cutAge = 0f;
+        if (cutAway == null) cutAway = new boolean[type.length];
+        for (int i = 0; i < type.length; i++) {
+            if (type[i] == Level.LIQUID || sink[i] > 0f) continue;
+            int c = i % (cols * rows);
+            if (bx * (c % cols) + bz * (c / cols) + bd < 0f) continue;
+            sink[i] = 0.001f;
+            cutAway[i] = true;
+        }
+        version++;
+        emit(EV_RUPTURE);
+    }
+
+    /**
+     * Whether, with this half cut away, the drop could still get from where it is onto a floor
+     * above the ground and come down from there onto an island the black drop stands on.
+     */
+    private boolean stompable(float nx, float nz, float d) {
+        // try the cut for a moment, by sinking the far half, and put it back after
+        float[] keep = sink.clone();
+        for (int i = 0; i < type.length; i++) {
+            int c = i % (cols * rows);
+            if (type[i] != Level.LIQUID && nx * (c % cols) + nz * (c / cols) + d >= 0f) sink[i] = Math.max(sink[i], 0.001f);
+        }
+        boolean ok = Boss.canComeDown(this, cellX, cellZ, Math.max(0, cellF));
+        System.arraycopy(keep, 0, sink, 0, sink.length);
+        return ok;
     }
 
     /** A rival has all its shards and makes for the gate. */
@@ -417,6 +556,21 @@ final class World {
 
         if (level.order != null && (state == PLAY || state == FALL_IN)) hum();
 
+        if (boss != null && (state == FALL_IN || state == PLAY)) {
+            if (cut && cutAge < CUT_TIME) {
+                cutAge += dt;
+                // the eye goes up to watch the cut half go under, and comes back
+                lift = smooth(0f, 0.8f, cutAge) * (1f - smooth(CUT_TIME - 0.8f, CUT_TIME, cutAge));
+                if (cutAge >= CUT_TIME) lift = 0f;
+            } else if (state == PLAY) {
+                if (boss.away) {
+                    bossWait -= dt;
+                    if (bossWait <= 0f) boss.place(this);
+                }
+                boss.step(this, dt);
+            }
+        }
+
         if (rivals != null && (state == RISE || state == FALL_IN || state == PLAY)) {
             for (Rival r : rivals) {
                 r.step(dt, this);
@@ -445,6 +599,7 @@ final class World {
         if (state == BURN) return stateAge > 1.4f;
         if (state == WIN) return stateAge > 3.1f;
         if (state == BEATEN) return stateAge > 1.8f;
+        if (state == CRUSHED) return stateAge > 2.2f;
         if (state == FUNNEL) return stateAge > 2.2f;
         return false;
     }
@@ -490,9 +645,27 @@ final class World {
     }
 
     private void land() {
+        int fromF = cellF;
         cellX = toX;
         cellZ = toZ;
         cellF = toF;
+        if (cellF >= 0 && boss != null && boss.at(cellX, cellZ, cellF)) {
+            x = cellX;
+            z = cellZ;
+            y = top(cellF);
+            if (fromF > cellF) {
+                // down onto it from a floor above: the black drop is beaten
+                state = WIN;
+                stateAge = 0f;
+                boss.away = true;
+                splash(cellX, cellZ, 3f, 2.4f);
+                emit(EV_STOMP);
+                return;
+            }
+            // into it from beside: it strikes all the same
+            strike();
+            if (state == CRUSHED) return;
+        }
         x = cellX;
         z = cellZ;
         y = top(cellF);
@@ -563,8 +736,8 @@ final class World {
 
     private void takeOff() {
         int t = typeAt(cellX, cellZ, cellF);
-        if (shift != 0) {
-            // through a shift the drop bounces on the spot, and keeps what it was asked for
+        if (shift != 0 || cutting()) {
+            // through a shift or a cut the drop bounces on the spot, and keeps what it was asked for
             toX = cellX;
             toZ = cellZ;
             toF = cellF;
@@ -847,7 +1020,22 @@ final class World {
             eye[0] += (float) Math.sin(time * 43f) * 0.012f * tremor;
             eye[1] += (float) Math.sin(time * 57f + 1f) * 0.016f * tremor;
         }
-        if (lift > 0f) {
+        if (lift > 0f && cut && cutAge < CUT_TIME) {
+            // through a cut the eye goes over to the side that went under and looks back at the
+            // sawn edge of what is left, the steps of every island it went through in section
+            float k = lift * lift * (3f - 2f * lift);
+            float cx = (cols - 1) * 0.5f, cz = (rows - 1) * 0.5f;
+            float off = cutX * cx + cutZ * cz + cutD;
+            float lx = cx - cutX * off, lz = cz - cutZ * off;
+            float reach = Math.max(cols, rows) * 0.38f + 1.2f;
+            float ux = lx + cutX * reach, uy = top(1) + 0.9f, uz = lz + cutZ * reach;
+            eye[0] += (ux - eye[0]) * k;
+            eye[1] += (uy - eye[1]) * k;
+            eye[2] += (uz - eye[2]) * k;
+            at[0] += (lx - at[0]) * k;
+            at[1] += (top(1) * 0.6f - at[1]) * k;
+            at[2] += (lz - at[2]) * k;
+        } else if (lift > 0f) {
             // through a shift the eye leaves the drop, rises behind it and looks down on the whole board
             float k = lift * lift * (3f - 2f * lift);
             float cx = (cols - 1) * 0.5f, cz = (rows - 1) * 0.5f;

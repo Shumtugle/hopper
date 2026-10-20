@@ -34,6 +34,15 @@ final class Hud {
     float clock;
     /** How black the dark before a level is: 1, or less while the world stands in it. */
     float dark = 1f;
+    /** How black the hopscotch's ground is: thinner in the open mode, with the world behind it. */
+    float chalkVeil = 0.9f;
+    /** The black drop is beaten: the hopscotch's mark stands between the map and the eye. */
+    boolean crowned;
+    /** Whether that mark is up now, so a tap on it counts. */
+    boolean markShown;
+    /** The open mode is on: the mark burns gold. */
+    boolean open;
+    static final float MARK_R = 0.05f;
 
     /** The centre and size of the watcher's eye, in screen widths: the top right corner, level with the map. */
     static float eyeX() {
@@ -53,6 +62,7 @@ final class Hud {
         map(w);
         watcher(w);
         pips(w);
+        mark(w);
         veil(w);
         return v;
     }
@@ -61,9 +71,30 @@ final class Hud {
      * The watcher: an eye in a stepped frame of bismuth, set on its corner. It comes and goes
      * with the map; tapped, it plays the level. While it plays it stays, and its frame glows.
      */
+    /**
+     * The prize for beating the black drop: a little hopscotch, chalk squares one, two, one,
+     * between the map and the eye. Tapped, it opens every level and every world.
+     */
+    private void mark(World w) {
+        markShown = false;
+        if (!crowned || w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
+        float fade = (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
+        if (fade <= 0.01f) return;
+        markShown = fade > 0.4f;
+        float x = 0f, y = eyeY(aspect), s = MARK_R * 0.32f, g = s * 2.3f;
+        float[][] at = {{0f, -g}, {-g * 0.55f, 0f}, {g * 0.55f, 0f}, {0f, g}};
+        for (float[] p : at) {
+            square(x + p[0], y + p[1], s * 1.25f, 1f, 0f, 0.02f, 0.02f, 0.03f, 0.6f * fade);
+            // gold while the open mode is on, chalk while it is off
+            if (open) frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 1f, 0.72f, 0.25f, 0.95f * fade);
+            else frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 0.92f, 0.9f, 0.84f, 0.85f * fade);
+        }
+    }
+
     private void watcher(World w) {
         eyeShown = false;
-        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
+        // the black drop is fought alone: the watcher does not come
+        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0 || w.boss != null) return;
         boolean playing = w.pilot != null;
         float fade = playing || thinking ? 1f
                 : (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));
@@ -126,7 +157,7 @@ final class Hud {
         labels = 0;
         float in = World.smooth(0f, 0.35f, ch.age);
         float hw = 0.5f, hh = aspect * 0.5f;
-        quad(-hw, -hh, hw, -hh, hw, hh, -hw, hh, 0f, 0f, 0f, 0.9f * in);
+        quad(-hw, -hh, hw, -hh, hw, hh, -hw, hh, 0f, 0f, 0f, chalkVeil * in);
         float h = Chalk.CELL * 0.5f;
         for (int row = ch.firstRow(); row <= ch.lastRow(); row++) {
             float y = ch.rowY(row);
@@ -247,6 +278,13 @@ final class Hud {
                     }
                 }
         }
+        // the black drop, a dark square with a burning edge
+        if (w.boss != null && !w.boss.away) {
+            float dx = w.boss.x - lx, dz = w.boss.z - lz;
+            float px = (dx * cy + dz * sy) * c + mx, py = (dx * sy - dz * cy) * c + my;
+            square(px, py, c * 0.34f, 0.7071f, 0.7071f, 0.9f, 0.32f, 0.1f, 0.95f * fade);
+            square(px, py, c * 0.24f, 0.7071f, 0.7071f, 0.02f, 0.02f, 0.03f, 1f * fade);
+        }
         // the rivals, lilac, where they are now; brighter once they make for the gate
         if (w.rivals != null) {
             for (Rival r : w.rivals) {
@@ -329,6 +367,15 @@ final class Hud {
             case World.FUNNEL:
                 a = World.smooth(0.45f, 1.4f, w.stateAge);
                 break;
+            case World.CRUSHED: {
+                // the second strike: a dark red going out to black
+                float k = World.smooth(0.3f, 1.6f, w.stateAge);
+                r = 0.45f * (1f - k);
+                g = 0.05f * (1f - k);
+                b = 0.03f * (1f - k);
+                a = World.smooth(0f, 0.5f, w.stateAge);
+                break;
+            }
             case World.BEATEN: {
                 // a rival got there first: a lilac dusk, going out to black
                 float k = World.smooth(0.6f, 1.8f, w.stateAge);

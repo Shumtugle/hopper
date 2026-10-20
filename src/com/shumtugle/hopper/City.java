@@ -230,10 +230,16 @@ final class City {
      * the world to where it stands. The vertex count is the length over Mesh.FLOATS.
      */
     float[] build(int from, int to, float ox, float oz) {
+        return build(from, to, ox, oz, null);
+    }
+
+    /** The same, writing where each piece ends, in vertices, into ends[i - from]. */
+    float[] build(int from, int to, float ox, float oz, int[] ends) {
         float[] out = new float[0];
         int floats = 0;
         for (int i = from; i < to; i++) {
             int n = piece(pieces.get(i), scratch, 0, ox, oz, 1f, 0f) * Mesh.FLOATS;
+            if (ends != null) ends[i - from] = (floats + n) / Mesh.FLOATS;
             if (floats + n > out.length) {
                 float[] more = new float[Math.max(out.length * 2, floats + n)];
                 System.arraycopy(out, 0, more, 0, floats);
@@ -456,14 +462,22 @@ final class City {
      * ox, oz move the world to where it stands; turn is the circling, in radians.
      */
     void camera(float ox, float oz, float turn, Piece fresh, float[] eye, float[] at) {
-        float mx = 0f, mz = 0f, mw = 0f;
-        for (Piece q : pieces) {
+        camera(pieces.size(), ox, oz, turn, fresh, eye, at);
+    }
+
+    /** The same for the world as it stood with only its first count pieces. */
+    void camera(int count, float ox, float oz, float turn, Piece fresh, float[] eye, float[] at) {
+        count = Math.max(1, Math.min(count, pieces.size()));
+        float mx = 0f, mz = 0f, mw = 0f, top = 1f;
+        for (int i = 0; i < count; i++) {
+            Piece q = pieces.get(i);
             mx += q.x * q.r; mz += q.z * q.r; mw += q.r;
+            top = Math.max(top, q.y + q.height);
         }
         mx /= mw;
         mz /= mw;
         // the body of the world, not its farthest stray street: nine pieces in ten lie within
-        float[] far = new float[pieces.size()];
+        float[] far = new float[count];
         for (int i = 0; i < far.length; i++) {
             Piece q = pieces.get(i);
             far[i] = (float) Math.hypot(q.x - mx, q.z - mz) + q.r;
@@ -476,7 +490,7 @@ final class City {
         float a = base + 0.7f + turn;
         eye[0] = ox + mx + (float) Math.cos(a) * d;
         // low, so the world stands up against the band of light at the horizon
-        eye[1] = Math.max(Math.min(tallest() * 0.8f + 0.5f, d * 0.45f), d * 0.32f);
+        eye[1] = Math.max(Math.min(top * 0.8f + 0.5f, d * 0.45f), d * 0.32f);
         eye[2] = oz + mz + (float) Math.sin(a) * d;
         float lx = mx, lz = mz;
         if (fresh != null) {

@@ -51,6 +51,13 @@ final class Maze {
         return Math.max(1, step);
     }
 
+    /** The hundredth level: the black drop. */
+    static final int BOSS = 99;
+
+    static boolean boss(int n) {
+        return n == BOSS;
+    }
+
     /** True if level n is one of the scheduled breathers. */
     static boolean breather(int n) {
         int shown = n + 1;
@@ -161,6 +168,7 @@ final class Maze {
             shape.shards = shardsFor(step);
             shape.ordered = ordered(n);
             hint = shape.ordered ? "the shards sing: take them from the lowest note up"
+                    : boss(n) ? "the black drop: come down on it from above"
                     : breather(n) ? "a breather"
                     : rivals(n) == 1 ? "a lilac drop races you to the gate"
                     : rivals(n) > 1 ? "two lilac drops race you to the gate" : "";
