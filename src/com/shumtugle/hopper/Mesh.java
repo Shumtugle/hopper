@@ -128,7 +128,9 @@ final class Mesh {
         int seen = 0;
         if (w.lift > 0.05f) {
             // seen from above through a shift, the drop itself is there to be found
+            int first = v;
             v = sphere(out, v, w.x, w.y + DROP, w.z, DROP);
+            if (w.cut) sawnDrop(w, out, first, v);
         }
         if (w.boss != null && !w.boss.away) {
             // the black drop
@@ -292,6 +294,26 @@ final class Mesh {
             v = vert(out, v, ax, y1, az, nx, 0f, nz, film, FACE);
         }
         return v;
+    }
+
+    /**
+     * The drop after the black drop's strike: cut through its middle along the same line as the
+     * world, the half beyond flattened into a face, pale and pink like the sawn islands.
+     */
+    private static void sawnDrop(World w, float[] out, int first, int end) {
+        float nx = w.cutX, nz = w.cutZ, cx = w.x, cz = w.z;
+        for (int k = first; k < end; k++) {
+            int o = k * FLOATS;
+            float d = (out[o] - cx) * nx + (out[o + 2] - cz) * nz;
+            if (d <= 0f) continue;
+            out[o] -= nx * d;
+            out[o + 2] -= nz * d;
+            out[o + 3] = nx;
+            out[o + 4] = 0f;
+            out[o + 5] = nz;
+            out[o + 6] = 300f;
+            out[o + 7] = FACE;
+        }
     }
 
     /** Huge hoppers far out in the liquid, so the eye has a horizon to hold on to. */

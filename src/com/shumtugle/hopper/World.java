@@ -148,6 +148,11 @@ final class World {
      */
     boolean cut;
     float cutX, cutZ, cutD, cutAge;
+    /**
+     * Which way the cut runs across the screen, as an angle, for the slash of the strike and the
+     * seam it leaves on the view; set by the stage from the eye's own angle on the cut line.
+     */
+    float cutScreen = Float.NaN;
     /** Islands the cut sent under, which tip over the edge as they go. */
     boolean[] cutAway;
     static final float CUT_TIME = 3.4f;

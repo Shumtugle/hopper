@@ -1,5 +1,13 @@
 # Changes
 
+## 1.6.2
+
+- A strike can no longer be missed: a bright slash runs right across the screen
+  along the line the world is cut by, with a flash, and the drop itself is cut,
+  sawn through like the islands when the eye looks down on it. A thin seam stays
+  on the view for the rest of the try: one strike left. The second strike slashes
+  across the first.
+
 ## 1.6.1
 
 - The black drop's level is drawn by hand: open ground and two slabs above it in

@@ -63,6 +63,7 @@ final class Hud {
         watcher(w);
         pips(w);
         mark(w);
+        slash(w);
         veil(w);
         return v;
     }
@@ -89,6 +90,49 @@ final class Hud {
             if (open) frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 1f, 0.72f, 0.25f, 0.95f * fade);
             else frameAround(x + p[0], y + p[1], s, s * 0.22f, 1f, 0f, 0.92f, 0.9f, 0.84f, 0.85f * fade);
         }
+    }
+
+    /**
+     * The black drop's strike on the view: at once a bright slash right across the screen, the
+     * line the world is cut along, with a flash; after it a thin seam stays on the view for the
+     * rest of the try, the drop itself being cut. One strike is left.
+     */
+    private void slash(World w) {
+        if (w.state == World.CRUSHED) {
+            // the second strike: a second slash, across the first, and the drop is gone
+            float base = Float.isNaN(w.cutScreen) ? 0.8f : w.cutScreen + 1.25f;
+            float c = (float) Math.cos(base), s = (float) Math.sin(base), reach = aspect * 1.2f, t = w.stateAge;
+            float drawn = World.smooth(0f, 0.12f, t), fade = 1f - World.smooth(0.5f, 1.4f, t);
+            line(-reach * c, -reach * s, (-1f + 2f * drawn) * reach * c, (-1f + 2f * drawn) * reach * s, 0.03f, 1f, 0.5f, 0.45f, 0.95f * fade);
+            return;
+        }
+        if (!w.cut || Float.isNaN(w.cutScreen) || w.state == World.DARK) return;
+        float c = (float) Math.cos(w.cutScreen), s = (float) Math.sin(w.cutScreen);
+        float reach = aspect * 1.2f, t = w.cutAge;
+        if (t < 0.9f) {
+            // the slash: drawn in a flick from one edge, then fading
+            float drawn = World.smooth(0f, 0.12f, t), fade = 1f - World.smooth(0.25f, 0.9f, t);
+            float wide = 0.012f + 0.03f * (1f - World.smooth(0f, 0.3f, t));
+            line(-reach * c, -reach * s, (-1f + 2f * drawn) * reach * c, (-1f + 2f * drawn) * reach * s, wide, 1f, 0.82f, 0.88f, 0.95f * fade);
+            line(-reach * c, -reach * s, (-1f + 2f * drawn) * reach * c, (-1f + 2f * drawn) * reach * s, wide * 4f, 1f, 0.45f, 0.6f, 0.25f * fade);
+            // and the flash of it
+            float flash = 0.45f * (1f - World.smooth(0f, 0.35f, t));
+            if (flash > 0.01f) quad(-0.5f, -aspect * 0.5f, 0.5f, -aspect * 0.5f, 0.5f, aspect * 0.5f, -0.5f, aspect * 0.5f, 1f, 0.75f, 0.82f, flash);
+        }
+        if (t > 0.4f && w.state != World.WIN) {
+            // the seam the strike leaves on the view, shimmering a little
+            float a = 0.28f + 0.07f * (float) Math.sin(clock * 2.3f);
+            a *= World.smooth(0.4f, 1.2f, t);
+            line(-reach * c, -reach * s, reach * c, reach * s, 0.004f, 1f, 0.7f, 0.8f, a);
+        }
+    }
+
+    /** A straight band between two points, wide its half width across. */
+    private void line(float x0, float y0, float x1, float y1, float wide, float r, float g, float b, float a) {
+        float dx = x1 - x0, dy = y1 - y0, l = (float) Math.sqrt(dx * dx + dy * dy);
+        if (l < 1e-5f) return;
+        float nx = -dy / l * wide, ny = dx / l * wide;
+        quad(x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, r, g, b, a);
     }
 
     private void watcher(World w) {

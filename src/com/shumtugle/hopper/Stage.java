@@ -525,6 +525,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         hudShapes.open = dev;
         Mat.lookAt(view, eye[0], eye[1], eye[2], look[0], look[1], look[2]);
         Mat.mul(mvp, proj, view);
+        if (w.cut && Float.isNaN(w.cutScreen)) w.cutScreen = screenAngle(w);
 
         GLES30.glClearColor(0f, 0f, 0f, 1f);
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
@@ -950,6 +951,28 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             t.start();
         }
         return preview != null;
+    }
+
+    /**
+     * The angle the cut line runs at across the screen, as the eye sees it at the strike: two
+     * points of the line near the drop, put through the camera. Steep if the line runs away.
+     */
+    private float screenAngle(World w) {
+        float ux = -w.cutZ, uz = w.cutX;
+        float d = w.cutX * w.x + w.cutZ * w.z + w.cutD;
+        float px = w.x - w.cutX * d, pz = w.z - w.cutZ * d, py = Math.max(0, w.cellF) * Level.FLOOR;
+        float[] a = clip(px - ux, py, pz - uz), b = clip(px + ux, py, pz + uz);
+        float dx = (b[0] - a[0]) * 0.5f, dy = (b[1] - a[1]) * 0.5f * aspect;
+        if (dx * dx + dy * dy < 1e-6f) return 1.2f;
+        return (float) Math.atan2(dy, dx);
+    }
+
+    /** A world point on the screen, x across and y up, in screen heights from the middle. */
+    private float[] clip(float x, float y, float z) {
+        float cx = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+        float cy = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+        float cw = Math.max(0.05f, mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15]);
+        return new float[] {cx / cw, cy / cw};
     }
 
     /** Binds a lit program and gives it this frame's gold. */
