@@ -137,8 +137,7 @@ final class Hud {
 
     private void watcher(World w) {
         eyeShown = false;
-        // the black drop is fought alone: the watcher does not come
-        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0 || w.boss != null) return;
+        if (w.state == World.DARK || w.state == World.RISE || w.shift != 0) return;
         boolean playing = w.pilot != null;
         float fade = playing || thinking ? 1f
                 : (w.state == World.PLAY || w.state == World.FALL_IN ? 1f : 0f) * (1f - World.smooth(2.2f, 2.9f, w.mapAge));

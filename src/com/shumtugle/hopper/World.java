@@ -136,6 +136,8 @@ final class World {
     final Rival[] rivals;
     /** In a rival's own copy of the level: the rival, asked at every landing what to do. */
     Rival brain;
+    /** The watcher plays against the black drop, choosing at each landing. */
+    private boolean watchBoss;
     /** The black drop of the hundredth level, or null. */
     final Boss boss;
     /** How many times it has struck; the second time the drop is lost. */
@@ -378,6 +380,13 @@ final class World {
     /** A rival has all its shards and makes for the gate. */
     void rivalReady() {
         emit(EV_RIVAL_READY);
+    }
+
+    /** Hands the drop to the watcher against the black drop: it decides at every landing. */
+    void watchBoss() {
+        watchBoss = true;
+        pilot = new int[0];
+        pilotAt = 0;
     }
 
     /** Hands the drop to the watcher, which will play these moves from the first landing on. */
@@ -754,6 +763,10 @@ final class World {
             return;
         }
         if (brain != null) brain.decide(this);
+        if (watchBoss && pilot != null) {
+            pilot = Boss.watch(this);
+            pilotAt = 0;
+        }
         if (pilot != null) order(t);
         plan(move);
         // a spring's throw leaves the order standing for the landing after it

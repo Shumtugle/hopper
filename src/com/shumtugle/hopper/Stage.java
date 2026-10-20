@@ -432,7 +432,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             way = null;
             wayFor = -1;
             world = new World(level, false);
-            world.fly(found);
+            if (Maze.boss(level)) world.watchBoss();
+            else world.fly(found);
             prepareLevel();
             w = world;
         }
@@ -506,7 +507,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             prepareLevel();
             w = world;
             // after the watcher's game, the hopscotch: any level played, or the next
-            if (watched) openChalk();
+            if (watched && !ending) openChalk();
         }
 
         stepCity(w, dt);
@@ -727,6 +728,13 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         thinking = true;
         act.onSummon();
         final int target = level;
+        if (Maze.boss(target)) {
+            // against the black drop there is no way to work out beforehand: it plays as it goes
+            way = new int[0];
+            wayFor = target;
+            thinking = false;
+            return;
+        }
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {

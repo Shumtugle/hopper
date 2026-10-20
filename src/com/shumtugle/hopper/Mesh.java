@@ -319,6 +319,7 @@ final class Mesh {
     /** Huge hoppers far out in the liquid, so the eye has a horizon to hold on to. */
     static int distance(World w, float[] out) {
         int v = 0;
+        if (w.boss != null) v = tower(w, out, v);
         float cx = (w.cols - 1) * 0.5f, cz = (w.rows - 1) * 0.5f;
         for (int k = 0; k < 9; k++) {
             float ang = k * 2.399963f + 0.4f;
@@ -340,7 +341,48 @@ final class Mesh {
     }
 
     static int distanceCapacity() {
-        return 9 * 4 * BOX;
+        return 9 * 4 * BOX + TOWER * BOX;
+    }
+
+    /** Boxes the black drop's tower takes. */
+    private static final int TOWER = 64;
+
+    /**
+     * The black drop's tower, far out beyond the board's far side: a tall dark stepped shaft
+     * narrowing upwards, ribs at its corners, spikes round the top and a crown burning red,
+     * where it waits and from where it leaps.
+     */
+    static int tower(World w, float[] out, int v) {
+        float x = Boss.towerX(w), z = Boss.TOWER_Z, top = Boss.TOWER_TOP;
+        // its foot, stepped down into the liquid
+        for (int k = 0; k < 3; k++) {
+            float a = 1.7f - k * 0.2f, t = -0.05f - k * 0.12f;
+            v = box(out, v, x, (t - 1.8f) * 0.5f, z, a, (t + 1.8f) * 0.5f, a, 330f + k * 30f, 0.45f);
+        }
+        // the shaft, eight storeys each narrower than the one below
+        int storeys = 8;
+        float each = (top - 0.4f) / storeys;
+        for (int k = 0; k < storeys; k++) {
+            float a = 1.15f - k * 0.075f, y0 = k * each;
+            v = box(out, v, x, y0 + each * 0.5f, z, a, each * 0.5f, a, 300f + k * 18f, 0.32f);
+            // a lip round each storey
+            v = rim(out, v, x, y0 + each - 0.06f, z, a + 0.08f, 0.08f, 0.08f, 360f + k * 12f, 0.5f);
+        }
+        // ribs up the corners
+        for (int k = 0; k < 4; k++) {
+            float sx = (k & 1) == 0 ? -1f : 1f, sz = (k & 2) == 0 ? -1f : 1f;
+            v = box(out, v, x + sx * 1.18f, top * 0.42f, z + sz * 1.18f, 0.1f, top * 0.42f, 0.1f, 280f, 0.4f);
+        }
+        // the top: a platform, spikes at its corners, and the crown burning red
+        float a = 1.15f - storeys * 0.075f + 0.1f;
+        v = box(out, v, x, top - 0.2f, z, a, 0.2f, a, 340f, 0.5f);
+        for (int k = 0; k < 4; k++) {
+            float sx = (k & 1) == 0 ? -1f : 1f, sz = (k & 2) == 0 ? -1f : 1f;
+            v = box(out, v, x + sx * a, top + 0.7f, z + sz * a, 0.07f, 0.7f, 0.07f, 300f, 0.45f);
+            v = box(out, v, x + sx * a, top + 1.45f, z + sz * a, 0.04f, 0.05f, 0.04f, 0.02f, GLOW);
+        }
+        v = rim(out, v, x, top, z, a * 0.8f, 0.07f, 0.12f, 0.02f, GLOW);
+        return v;
     }
 
     // ---- shapes ----

@@ -1,5 +1,13 @@
 # Changes
 
+## 1.6.3
+
+- The black drop comes from a tower: a tall dark shaft far beyond the arena,
+  ribbed, spiked and crowned with red fire, straight ahead at the start. It
+  leaps from the top in one long arc, and after a cut it comes again the same way.
+- The watcher plays the black drop too: up onto a slab, wait, come down on it as
+  its rim flares, and get down and away when it climbs up.
+
 ## 1.6.2
 
 - A strike can no longer be missed: a bright slash runs right across the screen

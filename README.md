@@ -97,7 +97,8 @@ and the cell your next bounce will land on.
 ## The black drop
 
 The hundredth level is an arena drawn by hand: open ground, and in two corners a
-slab of the floor above, each reached by a spring. It has no shards and no gate. A black drop falls in far away
+slab of the floor above, each reached by a spring. It has no shards and no gate. Far beyond it stands a tall dark tower crowned with
+fire; from its top a black drop leaps down into the arena
 and comes for you by the same rules you hop by, keeping off glass and hot
 plates. If it lands on your island it strikes: a slash runs across the
 screen, a seam stays on your view, and the world is cut in two: the half without you tips over the edge into the black, and the islands
@@ -105,6 +106,8 @@ the cut went through show their steps in section, sawn and polished. A second
 strike, and you are lost: the level starts again, whole. The only way through
 is to come down on it from a floor above. Where you could reach it in one hop or
 leap, it stops and looks up, its rim flaring: that is the moment.
+
+The watcher can fight it for you, as everywhere else.
 
 Beat it, and the world you grew turns to gold in a rose dawn. The game is won,
 and the levels go on; from then on a little hopscotch stands between the map

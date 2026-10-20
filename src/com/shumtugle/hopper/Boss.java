@@ -18,7 +18,13 @@ final class Boss {
     /** How often it bounces on the spot instead of hopping, and how fast it plays. */
     private static final float HESITATE = 0.22f, LOOK_UP = 0.45f, STARE = 0.85f, PACE = 0.85f;
     private static final float HOP_TIME = 0.72f, LEAP_TIME = 1.0f, SPOT_TIME = 0.62f, THROW_TIME = 1.2f;
-    private static final float HOP_HIGH = 0.62f, LEAP_HIGH = 1.15f, SPOT_HIGH = 0.48f, FALL_FROM = 6f, FALL_TIME = 1.3f;
+    private static final float HOP_HIGH = 0.62f, LEAP_HIGH = 1.15f, SPOT_HIGH = 0.48f, FALL_TIME = 1.3f;
+    /** Its tower stands far out beyond the board's far side; it leaps from the top. */
+    static final float TOWER_Z = -10.5f, TOWER_TOP = 7.6f, TOWER_LEAP = 2.6f;
+
+    static float towerX(World w) {
+        return (w.cols - 1) * 0.5f;
+    }
     private static final int[] DX = {0, 1, 0, -1}, DZ = {-1, 0, 1, 0};
 
     /** The island it stands on, or last stood on. */
@@ -27,6 +33,8 @@ final class Boss {
     int tx, tz, tf;
     float x, y, z;
     private float age, time = FALL_TIME, high, fromY, toY;
+    /** Where its leap in starts: the top of its tower. */
+    private float fromX, fromZ;
     /** Falling in from above; out of play while the world is cut. */
     boolean falling = true, away;
     /** It stands right under the drop, looking up. */
@@ -46,16 +54,20 @@ final class Boss {
         cx = tx = far[0];
         cz = tz = far[1];
         cf = tf = far[2];
-        x = cx;
-        z = cz;
-        fromY = World.top(cf) + FALL_FROM;
+        // it comes down from the top of its tower in one long leap
+        fromX = towerX(w);
+        fromZ = TOWER_Z;
+        fromY = TOWER_TOP + RADIUS;
+        x = fromX;
+        z = fromZ;
         toY = World.top(cf);
         y = fromY;
         age = 0f;
-        time = FALL_TIME;
-        high = 0f;
+        time = TOWER_LEAP;
+        high = 2.5f;
         falling = true;
         away = false;
+        staring = false;
     }
 
     /** Plays one step of time; tells the world when it lands. */
@@ -64,7 +76,9 @@ final class Boss {
         age += dt * PACE;
         float t = Math.min(1f, age / time);
         if (falling) {
-            y = toY + (fromY - toY) * (1f - t * t);
+            x = fromX + (cx - fromX) * t;
+            z = fromZ + (cz - fromZ) * t;
+            y = fromY + (toY - fromY) * t + 4f * high * t * (1f - t);
         } else {
             x = cx + (tx - cx) * t;
             z = cz + (tz - cz) * t;
@@ -224,6 +238,82 @@ final class Boss {
         out[2] = tf;
         out[3] = kind;
         return true;
+    }
+
+    /**
+     * The watcher's play against it, worked out at each landing of the drop: up onto a ledge
+     * over the ground, wait there, and come down on it once it stands below in reach. Returns
+     * the next move as cells across and along; 0, 0 bounces on the spot.
+     */
+    static int[] watch(World w) {
+        int x = w.cellX, z = w.cellZ, f = w.cellF;
+        Boss b = w.boss;
+        if (f < 0) return new int[] {0, 0};
+        if (f >= 1 && b != null && !b.away && !b.falling) {
+            for (int[] d : downs(w, x, z, f))
+                if (b.cx == x + d[0] && b.cz == z + d[1] && b.cf == d[2] && (b.staring || b.tx == b.cx && b.tz == b.cz))
+                    return new int[] {d[0], d[1]};
+        }
+        if (f >= 1 && b != null && !b.away && !b.falling) {
+            // it is coming up, by a spring or already on this floor: get down, away from it
+            boolean climbing = w.typeAt(b.cx, b.cz, b.cf) == Level.SPRING || b.tf > b.cf || b.cf == f;
+            if (climbing) {
+                int[] best = null;
+                float far = -1f;
+                for (int[] d : downs(w, x, z, f)) {
+                    float dx = x + d[0] - b.cx, dz = z + d[1] - b.cz, gap = dx * dx + dz * dz;
+                    if (gap > far && gap > 2.1f) {
+                        far = gap;
+                        best = d;
+                    }
+                }
+                if (best != null) return new int[] {best[0], best[1]};
+            }
+        }
+        if (f >= 1 && !downs(w, x, z, f).isEmpty()) return new int[] {0, 0};
+        // the way to the nearest ledge
+        int plane = w.cols * w.rows, n = plane * w.floors;
+        int[] from = new int[n];
+        java.util.Arrays.fill(from, -2);
+        int start = w.level.index(x, z, f);
+        from[start] = -1;
+        ArrayDeque<Integer> queue = new ArrayDeque<Integer>();
+        queue.add(start);
+        int[] out = new int[4];
+        while (!queue.isEmpty()) {
+            int s = queue.poll();
+            int sf = s / plane, sz = s % plane / w.cols, sx = s % plane % w.cols;
+            if (s != start && sf >= 1 && !downs(w, sx, sz, sf).isEmpty()) {
+                int c = s;
+                while (from[c] != start) c = from[c];
+                return new int[] {c % plane % w.cols - x, c % plane / w.cols - z};
+            }
+            for (int k = 0; k < 13; k++) {
+                if (!move(w, sx, sz, sf, k, out)) continue;
+                int q = w.level.index(out[0], out[1], out[2]);
+                if (from[q] != -2) continue;
+                from[q] = s;
+                queue.add(q);
+            }
+        }
+        return new int[] {0, 0};
+    }
+
+    /** Ways down from a ledge: hops and leaps that land on a lower floor, on stone or a spring. */
+    private static java.util.ArrayList<int[]> downs(World w, int x, int z, int f) {
+        java.util.ArrayList<int[]> out = new java.util.ArrayList<int[]>();
+        for (int dz = -2; dz <= 2; dz++)
+            for (int dx = -2; dx <= 2; dx++) {
+                if (dx == 0 && dz == 0) continue;
+                boolean leap = Math.abs(dx) == 2 || Math.abs(dz) == 2;
+                if (leap && dx != 0 && dz != 0) continue;
+                if (leap && (w.ceiling(x, z, f) || w.ceiling(x + dx / 2, z + dz / 2, f) || w.ceiling(x + dx, z + dz, f))) continue;
+                int lf = w.landing(x + dx, z + dz, f);
+                if (lf < 0 || lf >= f) continue;
+                int t = w.typeAt(x + dx, z + dz, lf);
+                if (t == Level.STONE || t == Level.SPRING) out.add(new int[] {dx, dz, lf});
+            }
+        return out;
     }
 
     /**
