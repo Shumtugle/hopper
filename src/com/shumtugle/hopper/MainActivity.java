@@ -74,7 +74,7 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         if (stage != null) {
             stage.onPause();
-            onLevel(stage.level());
+            if (!dev()) onLevel(stage.level());
             sound.stop();
         }
         super.onPause();
@@ -95,6 +95,24 @@ public final class MainActivity extends Activity {
                         | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                         | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+    }
+
+    /** The developer's mode: every level open, nothing won in it written down. */
+    boolean dev() {
+        return prefs.getBoolean("dev", false);
+    }
+
+    /** Turns the developer's mode on or off, with a run of bells up or down to say which. */
+    void setDev(boolean on) {
+        prefs.edit().putBoolean("dev", on).apply();
+        float[] notes = {293.66f, 369.99f, 440f, 587.33f};
+        for (int i = 0; i < notes.length; i++)
+            sound.strikeLater(notes[on ? i : notes.length - 1 - i], 0.3f, 1.2f, i * 0.1f);
+    }
+
+    /** The level last written down: where the game was before the developer's mode. */
+    int savedLevel() {
+        return Math.max(0, prefs.getInt("level", 0));
     }
 
     /** The level now being played; written down so the game comes back to it. */
@@ -159,6 +177,12 @@ public final class MainActivity extends Activity {
 
     /** Called on the render thread for every event the world raised this frame. */
     void onWorldEvent(int event, World w) {
+        if (event >= World.EV_RIVAL) {
+            // a rival landing near: a lighter knock than the drop's own, louder the nearer it is
+            int loud = event - World.EV_RIVAL;
+            sound.knock(1180f, 0.03f + 0.14f * loud / 15f, 0.022f);
+            return;
+        }
         if (event >= World.EV_HUM) {
             // a shard humming: its note by its place in the order, soft, louder when near
             int rank = (event - World.EV_HUM) / 16, loud = (event - World.EV_HUM) % 16;
@@ -246,6 +270,18 @@ public final class MainActivity extends Activity {
             case World.EV_RISEN:
                 sound.strike(293.66f, 0.3f, 1.6f);
                 sound.strikeLater(440f, 0.25f, 1.4f, 0.15f);
+                break;
+            case World.EV_RIVAL_READY:
+                // a rival has all its shards: two bells, a tritone apart, and it makes for the gate
+                sound.strike(311.13f, 0.3f, 1.4f);
+                sound.strikeLater(440f, 0.25f, 1.4f, 0.22f);
+                break;
+            case World.EV_BEATEN:
+                // a rival is through the gate first
+                sound.strike(155.56f, 0.6f, 2f);
+                sound.strikeLater(146.83f, 0.5f, 2.2f, 0.3f);
+                sound.strikeLater(110f, 0.45f, 2.4f, 0.7f);
+                thump(true);
                 break;
             case World.EV_ECHO:
                 // the island ahead answers, softly, a moment after the landing

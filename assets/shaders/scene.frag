@@ -41,9 +41,11 @@ void main() {
         float beat = 0.6 + 0.4 * sin(uTime * 3.1 + vW.x * 2.0 + vW.z * 1.3);
         col += vec3(1.0, 0.24, 0.04) * (0.45 + 0.7 * max(n.y, 0.0)) * beat;
     } else if (tag > 4.5) {
-        // quicksilver: a bright curved mirror
+        // quicksilver: a bright curved mirror; a rival's is lilac, brighter when it makes for the gate
         float fres = 0.75 + 0.25 * pow(1.0 - c, 4.0);
-        col = (0.04 + e * 1.3) * fres * vec3(0.92, 0.95, 1.0);
+        vec3 tint = vTag.x > 955.0 ? vec3(1.05, 0.45, 1.25) : vTag.x > 900.0 ? vec3(0.72, 0.32, 1.0) : vec3(0.92, 0.95, 1.0);
+        col = (0.04 + e * 1.3) * fres * tint;
+        if (vTag.x > 900.0) col += tint * (vTag.x > 955.0 ? 0.14 : 0.07);
     } else if (tag > 2.5) {
         // light of its own, brighter towards the edges of each face
         // white light is the gate's, kept softer than the shards so it does not burn out

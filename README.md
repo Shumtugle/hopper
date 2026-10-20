@@ -45,6 +45,16 @@ shortest way fits the difficulty. Difficulty rises one step every three levels,
 each step bringing one new thing, until it reaches a ceiling; every twentieth
 level is a step easier, every thirtieth two. There is always a next level.
 
+## Rivals
+
+From the thirty-sixth level on, about one level in four brings a lilac drop
+that races you to the gate; from the sixtieth, two. A rival has the same task
+as you, every shard and then the gate, and plays about as well as a person
+would: it hesitates, steps aside and back, now and then slips into the liquid
+and drops in again from above at the start. It is seen and heard landing near
+you, and shown on the map; once it has all its shards it burns brighter and two
+bells ring. If it reaches the gate first, the level is lost and starts again.
+
 ## The world
 
 Every level won for the first time grows a piece of a world out of the black,
@@ -83,6 +93,14 @@ is the very same level.
 The map in the corner turns with you: up is always ahead. It shows the floor you
 are on in full, the floors below small and dim, the floors above as outlines,
 and the cell your next bounce will land on.
+
+## The developer's mode
+
+A long press on the hopscotch turns it on, with a run of bells upwards; another
+turns it off, with the bells going down. While it is on, every level is open
+and the strip scrolls fast; nothing won is written down; and the world in the
+dark is as big as the level's number, so any level and any size of the world
+can be looked at without playing up to it.
 
 ## Building
 

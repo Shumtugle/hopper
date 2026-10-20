@@ -1,5 +1,17 @@
 # Changes
 
+## 1.5
+
+- Rivals: from the thirty-sixth level on, about one level in four brings a
+  lilac drop racing you to the gate, two from the sixtieth. It plays the same
+  task about as well as a person: it hesitates, steps aside, slips into the
+  liquid and drops in again from above at the start. Heard landing near you,
+  shown on the map, brighter once it has all its shards. First through the gate
+  wins; if it is the rival, the level starts again.
+- The developer's mode: a long press on the hopscotch opens every level, makes
+  the strip scroll fast, writes nothing down, and grows the world in the dark
+  to the size of the level's number.
+
 ## 1.4
 
 - The world: every level won for the first time grows a piece of it out of the

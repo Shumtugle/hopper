@@ -69,6 +69,20 @@ final class Maze {
         return (int) ((seed(n) >>> 29) % 7) == 0;
     }
 
+    /** The first level, counted from 0, where the difficulty stands at its ceiling for good. */
+    static final int PLATEAU = 35;
+
+    /**
+     * How many lilac drops race the player to the gate in level n: none before the plateau, and
+     * none in a breather, a shifting level or a level with an order; one in about four of the
+     * rest, two from the sixtieth level on.
+     */
+    static int rivals(int n) {
+        if (n < PLATEAU || n < Level.drawn() || breather(n) || staged(n) || ordered(n)) return 0;
+        if ((int) ((seed(n) >>> 25) % 4) != 0) return 0;
+        return n >= 59 ? 2 : 1;
+    }
+
     /**
      * The level a funnel pours the drop into, the attempt-th time it falls in level n: one of the
      * last twenty played, the recent more often than the old; never a drawn level, never a level
@@ -147,7 +161,9 @@ final class Maze {
             shape.shards = shardsFor(step);
             shape.ordered = ordered(n);
             hint = shape.ordered ? "the shards sing: take them from the lowest note up"
-                    : breather(n) ? "a breather" : "";
+                    : breather(n) ? "a breather"
+                    : rivals(n) == 1 ? "a lilac drop races you to the gate"
+                    : rivals(n) > 1 ? "two lilac drops race you to the gate" : "";
         }
         Level best = pick(r, step, want, hint, shape, 40);
         // never needed in practice; a plain line keeps the game going if it ever is

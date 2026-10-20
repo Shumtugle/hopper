@@ -247,6 +247,16 @@ final class Hud {
                     }
                 }
         }
+        // the rivals, lilac, where they are now; brighter once they make for the gate
+        if (w.rivals != null) {
+            for (Rival r : w.rivals) {
+                if (!r.shown()) continue;
+                float dx = r.w.x - lx, dz = r.w.z - lz;
+                float px = (dx * cy + dz * sy) * c + mx, py = (dx * sy - dz * cy) * c + my;
+                float k = r.ready ? 1f : 0.75f;
+                square(px, py, c * 0.24f, 0.7071f, 0.7071f, 0.8f * k, 0.5f * k, 1f * k, 0.95f * fade);
+            }
+        }
         // where the next hop lands; red when a floor overhead will stop it
         if (w.state == World.PLAY) {
             int nx = w.nextX(), nz = w.nextZ();
@@ -319,6 +329,15 @@ final class Hud {
             case World.FUNNEL:
                 a = World.smooth(0.45f, 1.4f, w.stateAge);
                 break;
+            case World.BEATEN: {
+                // a rival got there first: a lilac dusk, going out to black
+                float k = World.smooth(0.6f, 1.8f, w.stateAge);
+                r = 0.32f * (1f - k);
+                g = 0.18f * (1f - k);
+                b = 0.42f * (1f - k);
+                a = World.smooth(0f, 0.9f, w.stateAge);
+                break;
+            }
             case World.WIN: {
                 // up into white, then the white slowly goes out to the black the next level starts in
                 float dusk = 1f - World.smooth(1.3f, 2.9f, w.stateAge);

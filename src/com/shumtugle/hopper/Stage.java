@@ -33,7 +33,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     // commands from the UI thread
     private static final int FORWARD = 0, LEFT = 1, RIGHT = 2, ROUND = 3, TAP = 4, UP_LEFT = 5, UP_RIGHT = 6,
-            DRAG = 7, BACK = 8;
+            DRAG = 7, BACK = 8, DEV = 9;
     /** The watcher plays at a finger's pace: watching it is watching someone play. */
     private static final float WATCHER_PACE = 1f;
 
@@ -50,6 +50,14 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private volatile boolean chalkOpen;
     private int reached;
     private String marks;
+    /**
+     * The developer's mode: every level open on the hopscotch, which scrolls fast; nothing won
+     * is written down, and the world in the dark is as big as the level's number, so any level
+     * and any size of world can be looked at without playing up to it. A long press on the
+     * hopscotch turns it on and off.
+     */
+    private boolean dev;
+    private static final int DEV_AHEAD = 1000;
     private float lastMoveY;
 
     // a funnel's detour: the level it poured the drop out of, how often, and where it went last
@@ -109,6 +117,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         this.level = level;
         this.reached = Math.max(reached, level);
         this.marks = marks;
+        dev = act.dev();
+        Rival.threads = true;
         setEGLContextClientVersion(3);
         setEGLConfigChooser(8, 8, 8, 8, 24, 0);
         setPreserveEGLContextOnPause(true);
@@ -172,8 +182,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             }
             case MotionEvent.ACTION_UP: {
                 float dx = e.getX() - downX, dy = e.getY() - downY;
-                if (!swiped && dx * dx + dy * dy < (w * 0.03f) * (w * 0.03f) && e.getEventTime() - downAt < 400)
-                    queue(TAP, fx, fy);
+                boolean still = !swiped && dx * dx + dy * dy < (w * 0.03f) * (w * 0.03f);
+                if (still && e.getEventTime() - downAt < 400) queue(TAP, fx, fy);
+                else if (still && chalkOpen && e.getEventTime() - downAt > 1500) queue(DEV, 0f, 0f);
                 break;
             }
             default:
@@ -287,15 +298,16 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private void prepareCity(World w) {
         boolean grow = cityOwed;
         cityOwed = false;
-        cityShown = w.state == World.DARK && reached > 0;
+        int pieces = dev ? level : reached;
+        cityShown = w.state == World.DARK && pieces > 0;
         cityGrowing = cityShown && grow;
         cityRang = false;
         cityAge = 0f;
         cityLeave = -1f;
         if (!cityShown) return;
-        if (city == null || city.size() != reached) city = new City(reached);
+        if (city == null || city.size() != pieces) city = new City(pieces);
         float ox = (w.cols - 1) * 0.5f, oz = (w.rows - 1) * 0.5f;
-        float[] built = city.build(0, cityGrowing ? reached - 1 : reached, ox, oz);
+        float[] built = city.build(0, cityGrowing ? pieces - 1 : pieces, ox, oz);
         cityVerts = built.length / Mesh.FLOATS;
         FloatBuffer f = ByteBuffer.allocateDirect(Math.max(4, built.length * 4)).order(ByteOrder.nativeOrder()).asFloatBuffer();
         f.put(built).position(0);
@@ -353,7 +365,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 int cmd = (int) pending[i * 3];
                 float x = pending[i * 3 + 1], y = pending[i * 3 + 2];
                 if (chalk.open) {
-                    if (cmd == DRAG) chalk.drag(y);
+                    if (cmd == DRAG) chalk.drag(dev ? y * 8f : y);
+                    else if (cmd == DEV) toggleDev();
                     else if (cmd == TAP) pick(x, y);
                     else if (cmd == BACK) act.quit();
                     continue;
@@ -432,10 +445,10 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             prepareLevel();
             w = world;
         } else if (w.finished() && w.state == World.WIN && detourFrom >= 0) {
-            marks = act.onSolved(level, w.pilot != null);
+            marks = solved(level, w.pilot != null);
             level = detourFrom;
             detourFrom = -1;
-            act.onLevel(level);
+            saveLevel(level);
             world = new World(level, false);
             prepareLevel();
             w = world;
@@ -443,14 +456,14 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             boolean won = w.state == World.WIN;
             boolean watched = won && w.pilot != null;
             if (won) {
-                marks = act.onSolved(level, watched);
+                marks = solved(level, watched);
                 level++;
                 // a level opened for the first time grows the world by a piece
-                if (level > reached) cityOwed = true;
-                reached = Math.max(reached, level);
+                if (level > reached || dev) cityOwed = true;
+                if (!dev) reached = Math.max(reached, level);
             }
             // a detour remembers where it leads back to, should the game be closed half way
-            act.onLevel(detourFrom >= 0 ? detourFrom : level);
+            saveLevel(detourFrom >= 0 ? detourFrom : level);
             // a new level waits in the dark for its tap; a level tried again rises at once
             world = new World(level, won);
             prepareLevel();
@@ -593,8 +606,31 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     }
 
     private void openChalk() {
-        chalk.open(reached, level, marks, aspect);
+        chalk.open(dev ? Math.max(reached, level) + DEV_AHEAD : reached, level, marks, aspect);
         chalkOpen = true;
+    }
+
+    /** A long press on the hopscotch: the developer's mode on, or off and back to the real game. */
+    private void toggleDev() {
+        dev = !dev;
+        act.setDev(dev);
+        if (!dev) {
+            level = Math.min(act.savedLevel(), reached);
+            detourFrom = -1;
+            world = new World(level, true);
+            prepareLevel();
+        }
+        openChalk();
+    }
+
+    /** Writes down the level being played, unless in the developer's mode. */
+    private void saveLevel(int n) {
+        if (!dev) act.onLevel(n);
+    }
+
+    /** Writes down a level won, unless in the developer's mode; returns the marks. */
+    private String solved(int n, boolean watcher) {
+        return dev ? marks : act.onSolved(n, watcher);
     }
 
     /** A tap on the hopscotch: a square starts its level in the dark; anywhere else goes back. */
@@ -606,7 +642,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         if (index >= 0) detourFrom = -1;
         if (index >= 0 && (index != level || world.state != World.DARK)) {
             level = index;
-            act.onLevel(level);
+            saveLevel(level);
             world = new World(level, true);
             prepareLevel();
         }

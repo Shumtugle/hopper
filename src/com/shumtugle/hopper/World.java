@@ -30,21 +30,27 @@ package com.shumtugle.hopper;
  * Over a mirage stands a mirror, always turned to the drop, that shows it through a shimmer.
  * Near one, the island ahead answers each landing with a soft note; a mirage does not.
  *
+ * After the plateau some levels bring rivals: lilac drops, each playing its own copy of the
+ * level, racing the drop to the gate. One that gets there first loses the level for the drop.
+ *
  * The watcher can play a level instead: it is handed the solver's moves and, at each landing,
  * orders the next hop exactly as a finger would (a turn, a step, a leap, a slant). A swipe takes
  * the drop back from it.
  */
 final class World {
     // states
-    static final int FALL_IN = 0, PLAY = 1, DROWN = 2, BURN = 3, WIN = 4, DARK = 5, RISE = 6, FUNNEL = 7;
+    static final int FALL_IN = 0, PLAY = 1, DROWN = 2, BURN = 3, WIN = 4, DARK = 5, RISE = 6, FUNNEL = 7,
+            BEATEN = 8;
 
     // events for sound and touch feedback
     static final int EV_LAND = 1, EV_LAND_GLASS = 2, EV_LAND_SPRING = 3, EV_SHARD = 4, EV_BEAD = 5,
             EV_COOL = 6, EV_OPEN = 7, EV_WIN = 8, EV_DROWN = 9, EV_BURN = 10, EV_SINK = 11, EV_TURN = 12,
             EV_QUEUE = 13, EV_LEAP = 14, EV_BONK = 15, EV_WAKE = 16, EV_TREMOR = 17, EV_SHIFT = 18,
-            EV_RISEN = 19, EV_FUNNEL = 20, EV_ECHO = 21;
+            EV_RISEN = 19, EV_FUNNEL = 20, EV_ECHO = 21, EV_BEATEN = 22, EV_RIVAL_READY = 23;
     /** A shard humming: EV_HUM + rank * 16 + loudness, 1 to 15. */
     static final int EV_HUM = 1000;
+    /** A rival landing near the drop: EV_RIVAL + loudness, 1 to 15. */
+    static final int EV_RIVAL = 2000;
 
     // kinds of hop
     static final int STILL = 0, HOP = 1, LEAP = 2, THROW = 3;
@@ -120,7 +126,11 @@ final class World {
     int slant;
     /** The watcher's moves, dx and dz for each hop in turn, or null while a finger plays. */
     int[] pilot;
-    private int pilotAt;
+    int pilotAt;
+    /** The lilac drops racing the drop to the gate, or null; none in a rival's own copy. */
+    final Rival[] rivals;
+    /** In a rival's own copy of the level: the rival, asked at every landing what to do. */
+    Rival brain;
     /** Seconds since the map was last called up; it shows for a moment and fades. */
     float mapAge = -1.5f;
     private final int[] move = new int[3];
@@ -147,7 +157,15 @@ final class World {
     private int eventCount;
 
     World(int index, boolean dark) {
+        this(index, dark, false);
+    }
+
+    /** A level; ghost is a rival's own copy of it, which has no rivals of its own. */
+    World(int index, boolean dark, boolean ghost) {
         this.index = index;
+        int racers = ghost || index < Level.drawn() ? 0 : Maze.rivals(index);
+        rivals = racers == 0 ? null : new Rival[racers];
+        for (int k = 0; k < racers; k++) rivals[k] = new Rival(index, k, Rival.threads);
         level = Level.get(index);
         cols = level.cols;
         rows = level.rows;
@@ -195,6 +213,27 @@ final class World {
     /** How far below its place something on floor f is, standing on no island in particular. */
     float under(int f) {
         return under(f, -2);
+    }
+
+    /** Starts the drop falling in from above at once, without the level's rise. */
+    void dropIn() {
+        state = FALL_IN;
+        stateAge = 0f;
+        rise = 1f;
+        hopAge = 0f;
+    }
+
+    /** A rival has landed; heard if it is near the drop. */
+    void rivalLanded(float rx, float ry, float rz) {
+        float dx = rx - x, dz = rz - z, dy = (ry - y) / Level.FLOOR;
+        float d = (float) Math.sqrt(dx * dx + dz * dz + dy * dy);
+        if (d > 4f) return;
+        emit(EV_RIVAL + Math.max(1, Math.min(15, Math.round(15f * (1f - d / 4f)))));
+    }
+
+    /** A rival has all its shards and makes for the gate. */
+    void rivalReady() {
+        emit(EV_RIVAL_READY);
     }
 
     /** Hands the drop to the watcher, which will play these moves from the first landing on. */
@@ -378,6 +417,19 @@ final class World {
 
         if (level.order != null && (state == PLAY || state == FALL_IN)) hum();
 
+        if (rivals != null && (state == RISE || state == FALL_IN || state == PLAY)) {
+            for (Rival r : rivals) {
+                r.step(dt, this);
+                if (r.won && (state == PLAY || state == FALL_IN)) {
+                    // a rival has reached the gate first: the level is lost
+                    state = BEATEN;
+                    stateAge = 0f;
+                    pilot = null;
+                    emit(EV_BEATEN);
+                }
+            }
+        }
+
         // a slow rain of single drops keeps the black surface alive
         if (((int) (time * 0.7f)) != ((int) ((time - dt) * 0.7f))) {
             double a = time * 12.9898;
@@ -392,6 +444,7 @@ final class World {
         if (state == DROWN) return stateAge > 1.6f;
         if (state == BURN) return stateAge > 1.4f;
         if (state == WIN) return stateAge > 3.1f;
+        if (state == BEATEN) return stateAge > 1.8f;
         if (state == FUNNEL) return stateAge > 2.2f;
         return false;
     }
@@ -522,6 +575,7 @@ final class World {
             hopAge = 0f;
             return;
         }
+        if (brain != null) brain.decide(this);
         if (pilot != null) order(t);
         plan(move);
         // a spring's throw leaves the order standing for the landing after it

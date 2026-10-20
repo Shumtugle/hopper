@@ -7,12 +7,14 @@ package com.shumtugle.hopper;
  * The shade slot also says what a face is made of:
  *   up to 2   bismuth, the number its brightness
  *   3         light of its own; the film slot holds the hue (above 1.5: white)
- *   5         quicksilver
+ *   5         quicksilver; with a film of LILAC or more, a rival's lilac
  *   6         hot bismuth, glowing from inside
  *   7         glass
  */
 final class Mesh {
     static final int FLOATS = 8;
+    /** In a quicksilver face's film slot: a rival's lilac, and the brighter lilac of one making for the gate. */
+    static final float LILAC = 950f, LILAC_READY = 960f;
     static final float GLOW = 3f, SILVER = 5f, HOT = 6f, GLASS = 7f;
 
     private static final int BOX = 36;
@@ -26,7 +28,7 @@ final class Mesh {
     }
 
     static int dynamicCapacity(World w) {
-        return w.type.length * (3 * BOX + SPHERE) + 8 * BOX + SPHERE;
+        return w.type.length * (3 * BOX + SPHERE) + 8 * BOX + 3 * SPHERE;
     }
 
     /**
@@ -111,6 +113,15 @@ final class Mesh {
         if (w.lift > 0.05f) {
             // seen from above through a shift, the drop itself is there to be found
             v = sphere(out, v, w.x, w.y + DROP, w.z, DROP);
+        }
+        if (w.rivals != null) {
+            // the lilac drops racing the drop to the gate; one that has all its shards burns brighter
+            for (Rival r : w.rivals) {
+                if (!r.shown()) continue;
+                int first = v;
+                v = sphere(out, v, r.w.x, r.w.y + DROP, r.w.z, DROP);
+                for (int k = first; k < v; k++) out[k * FLOATS + 6] = r.ready ? LILAC_READY : LILAC;
+            }
         }
         for (int f = 0; f < w.floors; f++)
             for (int z = 0; z < w.rows; z++)
