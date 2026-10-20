@@ -33,13 +33,13 @@ final class Hud {
     /** Seconds, for the eye's blinking and the new square's pulse. */
     float clock;
 
-    /** The centre and size of the watcher's eye, in screen widths. */
+    /** The centre and size of the watcher's eye, in screen widths: the top right corner, level with the map. */
     static float eyeX() {
-        return 0.02f;
+        return 0.5f - 0.05f - EYE_R * 1.42f;
     }
 
     static float eyeY(float aspect) {
-        return aspect * 0.5f - 0.29f;
+        return aspect * 0.5f - 0.05f - EYE_R * 1.42f - 0.02f;
     }
 
     static final float EYE_R = 0.07f;

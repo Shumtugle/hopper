@@ -34,8 +34,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     // commands from the UI thread
     private static final int FORWARD = 0, LEFT = 1, RIGHT = 2, ROUND = 3, TAP = 4, UP_LEFT = 5, UP_RIGHT = 6,
             DRAG = 7, BACK = 8;
-    /** The watcher plays a little faster than a finger, so watching it is not a chore. */
-    private static final float WATCHER_PACE = 1.6f;
+    /** The watcher plays at a finger's pace: watching it is watching someone play. */
+    private static final float WATCHER_PACE = 1f;
 
     private final MainActivity act;
     private World world;

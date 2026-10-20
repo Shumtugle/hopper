@@ -1,5 +1,9 @@
 # Changes
 
+## 1.1.1
+
+- The watcher plays at a finger's pace, and its eye sits in the top right corner.
+
 ## 1.1
 
 - The watcher: an eye beside the map. Tapped, it solves the level and plays it
