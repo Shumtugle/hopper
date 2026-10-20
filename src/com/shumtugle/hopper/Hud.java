@@ -32,6 +32,8 @@ final class Hud {
     boolean eyeShown;
     /** Seconds, for the eye's blinking and the new square's pulse. */
     float clock;
+    /** How black the dark before a level is: 1, or less while the world stands in it. */
+    float dark = 1f;
 
     /** The centre and size of the watcher's eye, in screen widths: the top right corner, level with the map. */
     static float eyeX() {
@@ -297,7 +299,7 @@ final class Hud {
         float a = 0f, r = 0f, g = 0f, b = 0f;
         switch (w.state) {
             case World.DARK:
-                a = 1f;
+                a = dark;
                 break;
             case World.RISE:
                 // the black lifts as the ring goes out over the liquid

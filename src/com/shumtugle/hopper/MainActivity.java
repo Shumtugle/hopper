@@ -116,6 +116,22 @@ public final class MainActivity extends Activity {
         return m.toString();
     }
 
+    /**
+     * A new piece of the world comes up out of the black: a low bell and a fifth over it; a
+     * precious piece rings on, higher, as if something were found.
+     */
+    void onCityGrow(boolean precious) {
+        sound.strike(146.83f, 0.45f, 2.2f);
+        sound.strikeLater(220f, 0.32f, 2f, 0.35f);
+        sound.strikeLater(293.66f, 0.26f, 2f, 0.8f);
+        if (precious) {
+            sound.strikeLater(587.33f, 0.22f, 1.8f, 1.3f);
+            sound.strikeLater(739.99f, 0.18f, 1.8f, 1.45f);
+            sound.strikeLater(880f, 0.16f, 2f, 1.6f);
+            sound.strikeLater(1174.66f, 0.1f, 2.2f, 1.8f);
+        }
+    }
+
     /** The watcher has been called: a bell, high and soft. */
     void onSummon() {
         sound.strike(587.33f, 0.3f, 1.4f);

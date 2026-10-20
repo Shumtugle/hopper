@@ -68,7 +68,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private boolean stretching;
 
     private int sky, liquid, scene, mirage, hud, text;
-    private int triBuf, liquidBuf, islandBuf, movingBuf, farBuf, hudBuf, quadBuf, mirageBuf;
+    private int triBuf, liquidBuf, islandBuf, movingBuf, farBuf, hudBuf, quadBuf, mirageBuf, cityBuf, freshBuf;
     private int fieldTex, titleTex, digitTex;
     private int islandVerts, movingVerts, farVerts, mirageVerts, islandVersion = -1;
     private float[] islandData, movingData, farData, mirageData;
@@ -85,6 +85,19 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
     private final int[] events = new int[32];
     private final float[] proj = new float[16], view = new float[16], mvp = new float[16];
     private final float[] eye = new float[3], look = new float[3];
+
+    // the world that grows one piece for every level won for the first time, shown in the dark
+    // before a level: the newest piece grows out of the black; a tap sends it all under
+    private City city;
+    private int cityVerts, freshVerts;
+    private float[] freshData;
+    private FloatBuffer freshOut;
+    /** The world stands in the dark now; its newest piece is growing; seconds of both. */
+    private boolean cityShown, cityGrowing, cityRang;
+    private float cityAge, cityLeave = -1f;
+    /** Set by a win that opened a new level: the next dark grows a piece. */
+    private boolean cityOwed;
+    private final float[] mvpCity = new float[16];
 
     // frame timing for the log, so a phone test tells how heavy the shaders are
     private int frames;
@@ -196,8 +209,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         mirage = program("scene.vert", "mirage.frag");
         hud = program("hud.vert", "hud.frag");
         text = program("text.vert", "text.frag");
-        int[] ids = new int[8];
-        GLES30.glGenBuffers(8, ids, 0);
+        int[] ids = new int[10];
+        GLES30.glGenBuffers(10, ids, 0);
         triBuf = ids[0];
         liquidBuf = ids[1];
         islandBuf = ids[2];
@@ -206,6 +219,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         hudBuf = ids[5];
         quadBuf = ids[6];
         mirageBuf = ids[7];
+        cityBuf = ids[8];
+        freshBuf = ids[9];
+        city = null;
         upload2(triBuf, new float[] {-1, -1, 3, -1, -1, 3});
         upload2(quadBuf, new float[] {-1, -1, 1, -1, -1, 1, 1, 1});
         int[] tex = new int[3];
@@ -260,7 +276,68 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                 GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null);
         linear();
         makeTitle(w);
+        prepareCity(w);
         levelReady = true;
+    }
+
+    /**
+     * The world for the dark before a level: as many pieces as levels won for the first time.
+     * If a win just opened a new level, its piece is held back to grow in front of the eye.
+     */
+    private void prepareCity(World w) {
+        boolean grow = cityOwed;
+        cityOwed = false;
+        cityShown = w.state == World.DARK && reached > 0;
+        cityGrowing = cityShown && grow;
+        cityRang = false;
+        cityAge = 0f;
+        cityLeave = -1f;
+        if (!cityShown) return;
+        if (city == null || city.size() != reached) city = new City(reached);
+        float ox = (w.cols - 1) * 0.5f, oz = (w.rows - 1) * 0.5f;
+        float[] built = city.build(0, cityGrowing ? reached - 1 : reached, ox, oz);
+        cityVerts = built.length / Mesh.FLOATS;
+        FloatBuffer f = ByteBuffer.allocateDirect(Math.max(4, built.length * 4)).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        f.put(built).position(0);
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, cityBuf);
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, Math.max(4, built.length * 4), f, GLES30.GL_STATIC_DRAW);
+        if (freshData == null) {
+            freshData = new float[City.PIECE * Mesh.FLOATS];
+            freshOut = ByteBuffer.allocateDirect(freshData.length * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        }
+    }
+
+    /** The newest piece of the world, the one just earned, as far as it has grown. */
+    private City.Piece fresh() {
+        return cityGrowing ? city.pieces.get(city.size() - 1) : null;
+    }
+
+    /** How far the newest piece has grown out of the black. */
+    private float freshGrown() {
+        float k = World.smooth(0.9f, 3.6f, cityAge);
+        float a = 1f - k;
+        return 1f - a * a * a;
+    }
+
+    /** The world in the dark: it turns slowly round, grows its newest piece, and goes under at a tap. */
+    private void stepCity(World w, float dt) {
+        if (!cityShown) return;
+        cityAge += dt;
+        City.Piece p = fresh();
+        if (p != null && !cityRang && cityAge >= 0.9f) {
+            // the black parts where the new piece comes up
+            cityRang = true;
+            float ox = (w.cols - 1) * 0.5f, oz = (w.rows - 1) * 0.5f;
+            w.ripple(p.x + ox, p.z + oz, 0.6f, 1.6f);
+            act.onCityGrow(p.precious());
+        }
+        if (cityLeave >= 0f) {
+            cityLeave += dt;
+            if (cityLeave >= 1.1f) {
+                cityShown = false;
+                w.hold();
+            }
+        }
     }
 
     @Override
@@ -292,7 +369,10 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
                     case TAP: {
                         float ex = x - Hud.eyeX(), ey = y - Hud.eyeY(aspect);
                         if (hudShapes != null && hudShapes.eyeShown && ex * ex + ey * ey < Hud.EYE_R * Hud.EYE_R * 2.2f) summon();
-                        else w.hold();
+                        else if (cityShown && w.state == World.DARK) {
+                            // the first tap sends the world under; the level wakes once it is gone
+                            if (cityLeave < 0f) cityLeave = 0f;
+                        } else w.hold();
                         break;
                     }
                     default:
@@ -365,6 +445,8 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             if (won) {
                 marks = act.onSolved(level, watched);
                 level++;
+                // a level opened for the first time grows the world by a piece
+                if (level > reached) cityOwed = true;
                 reached = Math.max(reached, level);
             }
             // a detour remembers where it leads back to, should the game be closed half way
@@ -377,7 +459,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
             if (watched) openChalk();
         }
 
+        stepCity(w, dt);
         w.camera(eye, look);
+        if (cityShown) city.camera((w.cols - 1) * 0.5f, (w.rows - 1) * 0.5f, cityAge * 0.05f, fresh(), eye, look);
         Mat.lookAt(view, eye[0], eye[1], eye[2], look[0], look[1], look[2]);
         Mat.mul(mvp, proj, view);
 
@@ -457,7 +541,9 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         GLES30.glUniform1f(loc(scene, "uFilm"), w.film);
         drawMesh(islandBuf, islandVerts);
         drawMesh(movingBuf, movingVerts);
-        drawMesh(farBuf, farVerts);
+        // the world in the dark is its own horizon; the far hoppers belong to the level
+        if (cityShown) drawCity(w);
+        else drawMesh(farBuf, farVerts);
 
         // the mirages' mirrors last, see-through, over everything they stand in front of
         int need = Mesh.mirageCapacity(w) * Mesh.FLOATS;
@@ -481,6 +567,29 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
         drawMesh(mirageBuf, mirageVerts);
         GLES30.glDisable(GLES30.GL_BLEND);
         GLES30.glDepthMask(true);
+    }
+
+    /** The world in the dark, sinking whole into the liquid once a tap has sent it under. */
+    private void drawCity(World w) {
+        float sink = cityLeave < 0f ? 0f : World.smooth(0f, 1.0f, cityLeave);
+        float down = sink * sink * (city.tallest() + 2.5f);
+        System.arraycopy(mvp, 0, mvpCity, 0, 16);
+        // the whole world goes down at once: one step down in y, in front of the camera's matrix
+        for (int r = 0; r < 4; r++) mvpCity[12 + r] -= down * mvp[4 + r];
+        GLES30.glUseProgram(scene);
+        GLES30.glUniformMatrix4fv(loc(scene, "uMvp"), 1, false, mvpCity, 0);
+        drawMesh(cityBuf, cityVerts);
+        City.Piece p = fresh();
+        if (p != null && cityAge >= 0.9f) {
+            float ox = (w.cols - 1) * 0.5f, oz = (w.rows - 1) * 0.5f;
+            freshVerts = city.piece(p, freshData, 0, ox, oz, freshGrown(), 0f);
+            freshOut.position(0);
+            freshOut.put(freshData, 0, freshVerts * Mesh.FLOATS).position(0);
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, freshBuf);
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, freshVerts * Mesh.FLOATS * 4, freshOut, GLES30.GL_STREAM_DRAW);
+            drawMesh(freshBuf, freshVerts);
+        }
+        GLES30.glUniformMatrix4fv(loc(scene, "uMvp"), 1, false, mvp, 0);
     }
 
     private void openChalk() {
@@ -527,6 +636,7 @@ final class Stage extends GLSurfaceView implements GLSurfaceView.Renderer {
 
     private void drawHud(World w) {
         hudShapes.thinking = thinking;
+        hudShapes.dark = !cityShown ? 1f : cityLeave < 0f ? 0f : World.smooth(0.25f, 1.05f, cityLeave);
         hudShapes.clock = w.time;
         int n = hudShapes.build(w, aspect);
         if (n == 0) return;

@@ -1,5 +1,14 @@
 # Changes
 
+## 1.4
+
+- The world: every level won for the first time grows a piece of it out of the
+  black, in the dark before the next level, with a bell and a ring on the
+  liquid. Crystals first, growing out of each other; then glades, branches and
+  trees, cubes, houses with lit windows, streets, towers. Now and then a
+  precious thing: a burning gem, a funnel of light, a prism, with bells of its
+  own. A tap sends the world under, and the level wakes.
+
 ## 1.3.1
 
 - Mirages read as mirrors. Over each stands an upright sheet of quicksilver,

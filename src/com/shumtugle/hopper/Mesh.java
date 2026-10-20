@@ -244,7 +244,7 @@ final class Mesh {
     // ---- shapes ----
 
     /** A square frame lying flat on y0 around a cell, its outer half-size a, bar width b, height h. */
-    private static int rim(float[] out, int v, float x, float y0, float z, float a, float b, float h, float film, float shade) {
+    static int rim(float[] out, int v, float x, float y0, float z, float a, float b, float h, float film, float shade) {
         float hy = h * 0.5f, cy = y0 + hy;
         v = box(out, v, x, cy, z - (a - b * 0.5f), a, hy, b * 0.5f, film, shade);
         v = box(out, v, x, cy, z + (a - b * 0.5f), a, hy, b * 0.5f, film, shade);
@@ -256,13 +256,13 @@ final class Mesh {
     private static final float[] AXES = frame(1f, 0f, 0f, 0f, 0f, 0f);
 
     /** An axis-aligned box centred at (x, y, z) with half extents hx, hy, hz. */
-    private static int box(float[] out, int v, float x, float y, float z, float hx, float hy, float hz,
+    static int box(float[] out, int v, float x, float y, float z, float hx, float hy, float hz,
                            float film, float shade) {
         return boxIn(out, v, AXES, x, y, z, hx, hy, hz, film, shade);
     }
 
     /** A cube turned about y by yaw and tipped by tilt, so it stands on an edge. */
-    private static int spunBox(float[] out, int v, float x, float y, float z, float h, float yaw, float tilt,
+    static int spunBox(float[] out, int v, float x, float y, float z, float h, float yaw, float tilt,
                                float film, float shade) {
         float cy = (float) Math.cos(yaw), sy = (float) Math.sin(yaw);
         float ct = (float) Math.cos(tilt), st = (float) Math.sin(tilt);
@@ -276,7 +276,7 @@ final class Mesh {
     }
 
     /** A frame whose right axis is (rx, ry, rz) in the ground plane, up is +y, origin (ox, oy, oz). */
-    private static float[] frame(float rx, float ry, float rz, float ox, float oy, float oz) {
+    static float[] frame(float rx, float ry, float rz, float ox, float oy, float oz) {
         float l = (float) Math.sqrt(rx * rx + ry * ry + rz * rz);
         rx /= l; ry /= l; rz /= l;
         // forward = right x up
@@ -285,7 +285,7 @@ final class Mesh {
     }
 
     /** A box centred at (x, y, z) in the frame, with half extents along right, up and forward. */
-    private static int boxIn(float[] out, int v, float[] f, float x, float y, float z,
+    static int boxIn(float[] out, int v, float[] f, float x, float y, float z,
                              float hx, float hy, float hz, float film, float shade) {
         float cx = f[9] + f[0] * x + f[3] * y + f[6] * z;
         float cy = f[10] + f[1] * x + f[4] * y + f[7] * z;
@@ -348,7 +348,7 @@ final class Mesh {
         return p;
     }
 
-    private static int sphere(float[] out, int v, float x, float y, float z, float r) {
+    static int sphere(float[] out, int v, float x, float y, float z, float r) {
         for (int i = 0; i < SPHERE; i++) {
             float nx = BALL[i * 3], ny = BALL[i * 3 + 1], nz = BALL[i * 3 + 2];
             v = vert(out, v, x + nx * r, y + ny * r, z + nz * r, nx, ny, nz, 120f, SILVER);
@@ -356,7 +356,7 @@ final class Mesh {
         return v;
     }
 
-    private static int vert(float[] out, int v, float x, float y, float z,
+    static int vert(float[] out, int v, float x, float y, float z,
                             float nx, float ny, float nz, float film, float shade) {
         int o = v * FLOATS;
         out[o] = x; out[o + 1] = y; out[o + 2] = z;

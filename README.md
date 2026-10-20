@@ -45,6 +45,16 @@ shortest way fits the difficulty. Difficulty rises one step every three levels,
 each step bringing one new thing, until it reaches a ceiling; every twentieth
 level is a step easier, every thirtieth two. There is always a next level.
 
+## The world
+
+Every level won for the first time grows a piece of a world out of the black,
+in the dark before the next level. It starts as one crystal; the next ones grow
+out of each other, and in time come glades, branches and trees, cubes, houses
+with lit windows, whole streets and towers. Now and then, without warning,
+something precious comes up: a burning gem, a funnel of light, a prism. The
+world follows from the number of levels won alone, so it is always the same
+world. A tap sends it under, and the level wakes.
+
 ## The watcher and the hopscotch
 
 Beside the map sits the watcher: an eye in a stepped frame of bismuth. Tap it

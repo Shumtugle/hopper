@@ -13,8 +13,9 @@ package com.shumtugle.hopper;
  * in the target column that is no higher than the drop's own floor; a spring's throw may land
  * one floor higher. With nothing below, the drop falls into the liquid.
  *
- * A new level begins in total black, as if the phone were dead. A tap strikes the nothing,
- * a ring goes out over the liquid, and the level rises out of it; only then the drop falls in.
+ * A new level begins in the black, as if the phone were dead; after a win, the world stands
+ * in it, and a tap sends it under first. A tap strikes the nothing, a ring goes out over the
+ * liquid, and the level rises out of it; only then the drop falls in.
  * A level tried again after a fall rises at once, without waiting for the tap.
  *
  * A shifting level comes in acts. Each act lasts a number of landings; three before its end the
@@ -751,6 +752,13 @@ final class World {
     /** Share of the current hop done, 0 to 1. */
     float hopPhase() {
         return Math.min(1f, hopAge / hopTime);
+    }
+
+    /** A ring on the liquid round a point of the world, wherever it is; nothing past the grid. */
+    void ripple(float px, float pz, float radius, float depth) {
+        float u = (px - gridX0) / gridSize, v = (pz - gridZ0) / gridSize;
+        if (u < 0.02f || v < 0.02f || u > 0.98f || v > 0.98f) return;
+        liquid.press(u, v, radius * liquid.cols / gridSize, depth);
     }
 
     private void splash(int cx, int cz, float radius, float depth) {
