@@ -1,5 +1,10 @@
 # Changes
 
+## 1.6.4
+
+- The watcher no longer gives up the fight with the black drop at its first
+  strike: it plays on over the cut world to the end.
+
 ## 1.6.3
 
 - The black drop comes from a tower: a tall dark shaft far beyond the arena,

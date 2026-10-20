@@ -290,7 +290,8 @@ final class World {
     /** The black drop strikes: the first time the world is cut in two, the second the drop is lost. */
     private void strike() {
         hits++;
-        pilot = null;
+        // a finger's queued hop is forgotten; the watcher, playing against it, plays on
+        if (!watchBoss) pilot = null;
         boss.away = true;
         emit(EV_STRIKE);
         if (hits >= 2) {
